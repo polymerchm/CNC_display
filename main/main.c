@@ -24,9 +24,8 @@
 #include "ADC_task.h"
 #include "spindle_active_task.h"
 #include "relay_task.h"
+#include "router.c"
 
-#include "cnc.c"
-#include "logo.c"
 static const char *TAG = "CNC";
 
 /*
@@ -164,7 +163,7 @@ void app_main(void)
     // initialize the display/spi interfaces
     display_init();
     esp_lcd_panel_swap_xy(lcd_panel_handle,true);
-    esp_lcd_panel_draw_bitmap(lcd_panel_handle, 0, 0, 141, 156, &spmt_logo_map);
+    esp_lcd_panel_draw_bitmap(lcd_panel_handle, 0, 0, 240, 240, &router_map);
     while (true) {
         vTaskDelay(pdMS_TO_TICKS(500));
     }
