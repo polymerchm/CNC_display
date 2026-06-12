@@ -259,6 +259,7 @@ void app_main(void)
     display_init();
     esp_lcd_panel_swap_xy(lcd_panel_handle,true);
     esp_lcd_panel_draw_bitmap(lcd_panel_handle, 0, 0, 240, 240, &router_map);
+    vTaskDelay(2000/portTICK_PERIOD_MS);
 
     		  /*Initialize LVGL library*/
     lv_init();
