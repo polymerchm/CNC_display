@@ -15,5 +15,6 @@
     "--background-index",
     "--query-driver=**",
     "--compile-commands-dir=/Users/spollack/programming/esp/projects/CNC_display/build"
-  ]
+  ],
+  "idf.flashType": "UART"
 }
