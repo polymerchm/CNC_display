@@ -4,10 +4,11 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
+#include "freertos/timers.h"
 
 
 void spindle_active_task(void *pvParameters);
-extern QueueHandle_t spindleActiveQueue;
+
 
 
 #endif  /* MAIN_COMPONENTS_SPINDLE_ACTIVE_TASK */

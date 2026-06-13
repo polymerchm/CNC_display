@@ -3,6 +3,7 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 
 #include "driver/gpio.h"
 #include "esp_adc/adc_oneshot.h"
@@ -40,11 +41,67 @@ static const char *TAG = "CNC";
 #define TRUE 1
 #define FALSE 0
 
+/*================ GPIO ==============*/ 
+
+int spindle_sense_pin  = GPIO_NUM_32; 
+#define DEBOUNCE_TIME_US  50000 // 50 milliseconds
+double total_spindle_time; // total of all spindle on time since startup
+double time_at_turn_on; //   time for last segment
+
+
+// Create a queue to handle the GPIO event in a FreeRTOS task
+QueueHandle_t spindle_event_queue = NULL;
+
+// Debounced Interrupt Service Routine (ISR)
+// The ISR Handler
+static void IRAM_ATTR gpio_isr_handler(void* arg) {
+    static int64_t last_interrupt_time = 0;
+    int64_t interrupt_time = esp_timer_get_time();
+    
+    // If interrupts come faster than 50ms, assume it's a bounce and ignore
+    if (interrupt_time - last_interrupt_time > DEBOUNCE_TIME_US) {
+        uint32_t gpio_num = (uint32_t) arg;
+        xQueueSendFromISR(spindle_event_queue, &gpio_num, NULL);
+    }
+    last_interrupt_time = interrupt_time;
+}
+
+// void gpio_init_callback() {
+//     // 1. Configure the GPIO pin
+//     gpio_config_t gpio_io_conf = {
+//         .pin_bit_mask = (1ULL << spindle_sense_pin),
+//         .mode = GPIO_MODE_INPUT,
+//         .pull_up_en = GPIO_PULLUP_ENABLE, // Enable pull-up if using a floating button/sensor
+//         .pull_down_en = GPIO_PULLDOWN_DISABLE,
+//         .intr_type = GPIO_INTR_ANYEDGE // Trigger on both rising and falling edges
+//     };
+//     gpio_config(&gpio_io_conf);
+
+//     // 2. Create a queue for the task
+//     spindle_event_queue = xQueueCreate(10, sizeof(uint32_t));
+
+//     // 3. Install the generic GPIO ISR service (pass 0 for default flags)
+//     gpio_install_isr_service(0);
+
+//     // 4. Attach the ISR handler to the specific GPIO pin
+//     gpio_isr_handler_add(spindle_sense_pin, gpio_isr_handler, (void *) spindle_sense_pin);
+// }
+
+static void gpio_worker_task(void* arg)
+{
+    uint32_t io_num;
+    for(;;) {
+        if(xQueueReceive(spindle_event_queue, &io_num, portMAX_DELAY)) {
+            // Read current pin state to verify the logic level
+            int pin_level = gpio_get_level(io_num); 
+            ESP_LOGI(TAG, "Transition detected on GPIO[%lu]! Current Level: %d", io_num, pin_level);
+        }
+    }
+}
+
+
 /* I2C */
 
-
-
-// #define T1_PIN GPIO_NUM_5
 // int speed = 0;
 // bool spindle_on = FALSE;
 
@@ -162,6 +219,7 @@ static void display_init(void)
 
 // LVGL library is not thread-safe, this will call LVGL APIs from different tasks, so use a mutex to protect it
 static _lock_t lvgl_api_lock;
+lv_obj_t * text_label = NULL;
 
 void my_ui(void)
 {
@@ -169,10 +227,10 @@ void my_ui(void)
     lv_obj_set_style_bg_color(lv_screen_active(), lv_color_hex(0x003a57), LV_PART_MAIN);
 
     /*Create a white label, set its text and align it to the center*/
-    lv_obj_t * label = lv_label_create(lv_screen_active());
-    lv_label_set_text(label, "Hello world");
+    text_label = lv_label_create(lv_screen_active());
+    lv_label_set_text(text_label, "Hello world");
     lv_obj_set_style_text_color(lv_screen_active(), lv_color_hex(0xffffff), LV_PART_MAIN);
-    lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_align(text_label, LV_ALIGN_CENTER, 0, 0);
 }
 
 static bool notify_lvgl_flush_ready(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_io_event_data_t *edata, void *user_ctx)
@@ -230,6 +288,26 @@ static void lvgl_tick(void *arg)
 {
     /* Tell LVGL how many milliseconds has elapsed */
     lv_tick_inc(LVGL_TICK_PERIOD_MS);
+}
+
+static void init_spindle_change(void) {
+       gpio_config_t gpio_io_conf = {
+        .pin_bit_mask = (1ULL << spindle_sense_pin),
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_ENABLE, // Enable pull-up if using a floating button/sensor
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_ANYEDGE // Trigger on both rising and falling edges
+    };
+    gpio_config(&gpio_io_conf);
+
+    spindle_event_queue = xQueueCreate(10, sizeof(uint32_t));
+    xTaskCreate(gpio_worker_task, "gpio_worker_task", 2048, NULL, 10, NULL);
+
+    // 5. Initialize the per-pin ISR service and link the handler
+    gpio_install_isr_service(0);
+    gpio_isr_handler_add(spindle_sense_pin, gpio_isr_handler, (void*) spindle_sense_pin);
+
+    ESP_LOGI(TAG, "Transition detection monitoring initialized.");
 }
 
 static void lvgl_port_task(void *arg)
@@ -303,6 +381,8 @@ void app_main(void)
     };
     ESP_ERROR_CHECK(esp_lcd_panel_io_register_event_callbacks(lcd_io_handle, &cbs, display));
     
+    /* gpio init */
+    init_spindle_change();
 
 	/* Run the UI */
     // Lock the mutex due to the LVGL APIs are not thread-safe
@@ -313,13 +393,16 @@ void app_main(void)
     /*Create LVGL task*/
     xTaskCreate(lvgl_port_task, "LVGL", 4*4096, NULL, 2, NULL);
 	
+    time_at_turn_on = 0;
+    total_spindle_time = 0;
+    //xTaskCreate(spindle_active_task, "spindle_active", 512, NULL, 3, NULL);
+
 	while (1)
 	{
 		vTaskDelay(1000/portTICK_PERIOD_MS);
 	}
 
     // // initialize the I2C bus
-    // xTaskCreate(spindle_active_task, "spindle_active", 512, &ucParameterToPass, 3, &xHandle);
     // xTaskCreate(ADC_task, "ADC_task", 512, &ucParameterToPass, 3, &xHandle);
     // xTaskCreate(display_task, "display_task", 512, &ucParameterToPass, 3, &xHandle);
     // xTaskCreate(relay_task, "relay", 512, &ucParameterToPass, 3, &xHandle);
