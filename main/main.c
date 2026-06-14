@@ -11,6 +11,7 @@
 #include "encoder.h"
 
 
+
 #include "esp_lcd_ili9341.h"
 #include "esp_lcd_panel_commands.h"
 #include "esp_lcd_panel_dev.h"
@@ -61,10 +62,10 @@ LCD (SPI)
 ROTARY ENCODER
     CLK    25
     DT     26
-    BTN    33 
+    BTN    2 
 */
 
-/*================ GPIO ==============*/ 
+// /*================ GPIO ==============*/ 
 
 int spindle_sense_pin  = GPIO_NUM_32; 
 #define DEBOUNCE_TIME_US  50000 // 50 milliseconds
@@ -178,7 +179,6 @@ i2c_master_dev_handle_t adc_i2C_handle;
 #define LCD_CMD_BITS 8
 #define LCD_PARAM_BITS 8
 
-void display_task(void *pvParameters);
 
 spi_bus_config_t buscfg = {
     .sclk_io_num = PIN_NUM_SCLK,
@@ -303,6 +303,21 @@ static void lvgl_tick(void *arg)
     lv_tick_inc(LVGL_TICK_PERIOD_MS);
 }
 
+static void lvgl_port_task(void *arg)
+{
+    uint32_t time_till_next_ms = 0;
+    uint32_t time_threshold_ms = 2000 / CONFIG_FREERTOS_HZ;
+    while (1) {
+        _lock_acquire(&lvgl_api_lock);
+        time_till_next_ms = lv_timer_handler();
+        _lock_release(&lvgl_api_lock);
+        // in case of triggering a task watch dog time out
+        time_till_next_ms = MAX(time_till_next_ms, time_threshold_ms);
+        vTaskDelay(time_till_next_ms);
+    }
+}
+
+
 static void init_spindle_change(void) {
        gpio_config_t gpio_io_conf = {
         .pin_bit_mask = (1ULL << spindle_sense_pin),
@@ -323,25 +338,12 @@ static void init_spindle_change(void) {
     ESP_LOGI(TAG, "Transition detection monitoring initialized.");
 }
 
-static void lvgl_port_task(void *arg)
-{
-    uint32_t time_till_next_ms = 0;
-    uint32_t time_threshold_ms = 2000 / CONFIG_FREERTOS_HZ;
-    while (1) {
-        _lock_acquire(&lvgl_api_lock);
-        time_till_next_ms = lv_timer_handler();
-        _lock_release(&lvgl_api_lock);
-        // in case of triggering a task watch dog time out
-        time_till_next_ms = MAX(time_till_next_ms, time_threshold_ms);
-        vTaskDelay(time_till_next_ms);
-    }
-}
 
 /* Rotory Encoder Section */
 
 #define re_channel_a GPIO_NUM_25
 #define re_channel_b GPIO_NUM_26
-#define re_button    GPIO_NUM_33
+#define re_button    GPIO_NUM_2
 
 #define RE_EVENT_QUEUE_LEN 5
 
@@ -362,7 +364,6 @@ rotary_encoder_config_t re_config = {
     .btn_pressed_level = 0, // active low
     .enable_internal_pullup = true, 
     .callback = encoder_event_handler,
-
 };
 
 
@@ -372,6 +373,16 @@ void re_task(void *arg)
 {
     // Create queue for rotary encoder events
     re_event_queue = xQueueCreate(RE_EVENT_QUEUE_LEN, sizeof(rotary_encoder_event_t));
+    rotary_encoder_config_t re_config = {
+    .pin_a = re_channel_a,
+    .pin_b = re_channel_b,
+    .pin_btn = re_button,
+    .btn_pressed_level = 0, // active low
+    .enable_internal_pullup = true, 
+    // .btn_long_press_time_us = 500000,
+    .callback = encoder_event_handler,
+    .callback_ctx = re_event_queue  
+};
 
     // Create an encoder
   
@@ -418,12 +429,12 @@ void re_task(void *arg)
 
 void app_main(void)
 {
-    // static uint8_t ucParameterToPass;
-    // TaskHandle_t xHandle = NULL;
+    static uint8_t ucParameterToPass;
+    TaskHandle_t xHandle = NULL;
 
-    // ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_config, &bus_handle));
-    // ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &adc_i2C_cfg, &adc_i2C_handle));
-    // ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &relay_i2C_cfg, &relay_i2C_handle));
+    ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_config, &bus_handle));
+    ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &adc_i2C_cfg, &adc_i2C_handle));
+    ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &relay_i2C_cfg, &relay_i2C_handle));
 
     // initialize the display/spi interfaces
     display_init();
@@ -479,24 +490,25 @@ void app_main(void)
     /* init the Re task */
     xTaskCreate(re_task, TAG, configMINIMAL_STACK_SIZE * 8, NULL, 5, NULL);
 
-	/* Run the UI */
-    // Lock the mutex due to the LVGL APIs are not thread-safe
-    _lock_acquire(&lvgl_api_lock);
-    my_ui();
-    _lock_release(&lvgl_api_lock);
+	// /* Run the UI */
+    // // Lock the mutex due to the LVGL APIs are not thread-safe
+    // // _lock_acquire(&lvgl_api_lock);
+    // // my_ui();
+    // // _lock_release(&lvgl_api_lock);
     
-    /*Create LVGL task*/
-    xTaskCreate(lvgl_port_task, "LVGL", 4*4096, NULL, 2, NULL);
+    // /*Create LVGL task*/
+    // // xTaskCreate(lvgl_port_task, "LVGL", 4*4096, NULL, 2, NULL);
 	
     time_at_turn_on = 0;
     total_spindle_time = 0;
-    //xTaskCreate(spindle_active_task, "spindle_active", 512, NULL, 3, NULL);
 
-	while (1)
+	for(;;)
 	{
-		vTaskDelay(1000/portTICK_PERIOD_MS);
+        // lv_timer_handler();
+		// vTaskDelay(1);
+        vTaskDelay(1000/portTICK_PERIOD_MS);
+    
 	}
-
     // // initialize the I2C bus
     // xTaskCreate(ADC_task, "ADC_task", 512, &ucParameterToPass, 3, &xHandle);
     // xTaskCreate(display_task, "display_task", 512, &ucParameterToPass, 3, &xHandle);
