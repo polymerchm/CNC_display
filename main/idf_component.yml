@@ -1,3 +1,4 @@
 dependencies:
- esp_lcd_ili9341: "^2.0.2"
- lvgl/lvgl: "^9.5.0"
+  esp_lcd_ili9341: ^2.0.2
+  lvgl/lvgl: ^9.5.0
+  esp-idf-lib/encoder: ^3.0.2

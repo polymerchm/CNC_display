@@ -4,9 +4,15 @@ Bodgery CNC-Router Heads-Up Display
 Rev 0:
     reads FM1 via an I2C ADC - a voltage proportional to the spindle frequency/speed
         ADC Model: Gravity: 0-10V 15-Bit Dual-Channel High-Precision ADC Module (using ADS1115)
+
+    send a voltage between 0 and 10V to program the VFD
+        DAC Model: Gravity 0-10 V 16 bit DAC 
+
+    using a rotory encoder to change the desired spindle speed (  programs the to the DAC)
     
     monitors the T1 line for spindle turn on
-        GPIO line XXX pulled up, looking for active low (interups on negative)
+        GPIO line XXX pulled up, looking for active low (toggles on any change)
+        ISR is debounced
     accumulates the spindle time since bootup
         task running in background when spindle is on.
     displays relevant information
@@ -15,10 +21,13 @@ Rev 0:
         monitors spindle state
 
     ADC_task:
-        gets current speed by reading the ADC and converting 
-        the 0-10 V signal to 0-24,000 RPM
-        calibrations for conversion of voltage to spped/frequencey stored in NVS
+        gets current frequency by reading the ADC and converting 
 
+    DAC_task
+        monitors its queu change changes the output voltag
+
+    Rotory encoder task
+        send new voltage to the DAC queue
     display_task:
         updates programmed RPM
         updated accumulated spindle time
@@ -29,7 +38,7 @@ Rev 0:
             turns on/off the relays
                 chiller (0-10v)
                 dust collector (0-10V)
-                heads up display (0-xV)
+                spindle (0-xV)
     */
 
 /*

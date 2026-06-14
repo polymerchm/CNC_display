@@ -8,6 +8,7 @@
 #include "driver/gpio.h"
 #include "esp_adc/adc_oneshot.h"
 #include "driver/i2c_master.h"
+#include "encoder.h"
 
 
 #include "esp_lcd_ili9341.h"
@@ -38,8 +39,30 @@ static const char *TAG = "CNC";
         Bodgery CNC-Router Heads-Up Display
 
 */
-#define TRUE 1
-#define FALSE 0
+
+
+/* GPIO Inventory 
+General GPIO
+    SPINTDLE RELAR 32
+    
+I2C (DAC, ADC, Relays)
+    SDA 16
+    SCL 17
+
+LCD (SPI)
+    PBKL 4
+    LCD_CS 5
+    CLK  18
+    MISO 19
+    LCD_DC 21
+    RST  22
+    MOSI 23
+
+ROTARY ENCODER
+    CLK    25
+    DT     26
+    BTN    33 
+*/
 
 /*================ GPIO ==============*/ 
 
@@ -66,28 +89,9 @@ static void IRAM_ATTR gpio_isr_handler(void* arg) {
     last_interrupt_time = interrupt_time;
 }
 
-// void gpio_init_callback() {
-//     // 1. Configure the GPIO pin
-//     gpio_config_t gpio_io_conf = {
-//         .pin_bit_mask = (1ULL << spindle_sense_pin),
-//         .mode = GPIO_MODE_INPUT,
-//         .pull_up_en = GPIO_PULLUP_ENABLE, // Enable pull-up if using a floating button/sensor
-//         .pull_down_en = GPIO_PULLDOWN_DISABLE,
-//         .intr_type = GPIO_INTR_ANYEDGE // Trigger on both rising and falling edges
-//     };
-//     gpio_config(&gpio_io_conf);
 
-//     // 2. Create a queue for the task
-//     spindle_event_queue = xQueueCreate(10, sizeof(uint32_t));
 
-//     // 3. Install the generic GPIO ISR service (pass 0 for default flags)
-//     gpio_install_isr_service(0);
-
-//     // 4. Attach the ISR handler to the specific GPIO pin
-//     gpio_isr_handler_add(spindle_sense_pin, gpio_isr_handler, (void *) spindle_sense_pin);
-// }
-
-static void gpio_worker_task(void* arg)
+static void gpio_spindle_task(void* arg)
 {
     uint32_t io_num;
     for(;;) {
@@ -95,6 +99,15 @@ static void gpio_worker_task(void* arg)
             // Read current pin state to verify the logic level
             int pin_level = gpio_get_level(io_num); 
             ESP_LOGI(TAG, "Transition detected on GPIO[%lu]! Current Level: %d", io_num, pin_level);
+            // here is where you set the relays!!!
+            if (pin_level == 0) {
+                // turn off all relays
+                // stop counting spindle time
+                // add to the total spindle count
+            } else {
+                // turn on all relays
+                // start counting the spindle time
+            }
         }
     }
 }
@@ -120,8 +133,8 @@ static void gpio_worker_task(void* arg)
 #define ADC_ADDR (0x48)
 #define RELAY_ADDR (0x20)
 
-#define SDA GPIO_NUM_21
-#define SCL GPIO_NUM_22
+#define SDA GPIO_NUM_16
+#define SCL GPIO_NUM_17
 
 i2c_master_bus_config_t i2c_bus_config = {
     .i2c_port = I2C_NUM_0,
@@ -301,7 +314,7 @@ static void init_spindle_change(void) {
     gpio_config(&gpio_io_conf);
 
     spindle_event_queue = xQueueCreate(10, sizeof(uint32_t));
-    xTaskCreate(gpio_worker_task, "gpio_worker_task", 2048, NULL, 10, NULL);
+    xTaskCreate(gpio_spindle_task, "gpio_worker_task", 2048, NULL, 10, NULL);
 
     // 5. Initialize the per-pin ISR service and link the handler
     gpio_install_isr_service(0);
@@ -323,6 +336,85 @@ static void lvgl_port_task(void *arg)
         vTaskDelay(time_till_next_ms);
     }
 }
+
+/* Rotory Encoder Section */
+
+#define re_channel_a GPIO_NUM_25
+#define re_channel_b GPIO_NUM_26
+#define re_button    GPIO_NUM_33
+
+#define RE_EVENT_QUEUE_LEN 5
+
+QueueHandle_t re_event_queue;
+rotary_encoder_handle_t re;
+
+
+static void encoder_event_handler(const rotary_encoder_event_t *event, void *ctx)
+{
+    QueueHandle_t queue = (QueueHandle_t)ctx;
+    xQueueSendToBack(queue, event, 0);
+}
+
+rotary_encoder_config_t re_config = {
+    .pin_a = re_channel_a,
+    .pin_b = re_channel_b,
+    .pin_btn = re_button,
+    .btn_pressed_level = 0, // active low
+    .enable_internal_pullup = true, 
+    .callback = encoder_event_handler,
+
+};
+
+
+
+
+void re_task(void *arg)
+{
+    // Create queue for rotary encoder events
+    re_event_queue = xQueueCreate(RE_EVENT_QUEUE_LEN, sizeof(rotary_encoder_event_t));
+
+    // Create an encoder
+  
+    ESP_ERROR_CHECK(rotary_encoder_create(&re_config, &re));
+
+    rotary_encoder_event_t e;
+    int32_t val = 0;
+
+    ESP_LOGI(TAG, "Initial value: %" PRIi32, val);
+    while (1)
+    {
+        xQueueReceive(re_event_queue, &e, portMAX_DELAY);
+
+        switch (e.type)
+        {
+            case RE_ET_BTN_PRESSED:
+                ESP_LOGI(TAG, "Button pressed");
+                break;
+            case RE_ET_BTN_RELEASED:
+                ESP_LOGI(TAG, "Button released");
+                break;
+            case RE_ET_BTN_CLICKED:
+                ESP_LOGI(TAG, "Button clicked");
+                rotary_encoder_enable_acceleration(re, 100);
+                ESP_LOGI(TAG, "Acceleration enabled");
+                break;
+            case RE_ET_BTN_LONG_PRESSED:
+                ESP_LOGI(TAG, "Looooong pressed button");
+                rotary_encoder_disable_acceleration(re);
+                ESP_LOGI(TAG, "Acceleration disabled");
+                break;
+            case RE_ET_CHANGED:
+                val += e.diff;
+                ESP_LOGI(TAG, "Value = %" PRIi32, val);
+                break;
+            default:
+                break;
+        }
+    }
+}
+
+
+
 
 void app_main(void)
 {
@@ -384,6 +476,9 @@ void app_main(void)
     /* gpio init */
     init_spindle_change();
 
+    /* init the Re task */
+    xTaskCreate(re_task, TAG, configMINIMAL_STACK_SIZE * 8, NULL, 5, NULL);
+
 	/* Run the UI */
     // Lock the mutex due to the LVGL APIs are not thread-safe
     _lock_acquire(&lvgl_api_lock);
@@ -406,11 +501,4 @@ void app_main(void)
     // xTaskCreate(ADC_task, "ADC_task", 512, &ucParameterToPass, 3, &xHandle);
     // xTaskCreate(display_task, "display_task", 512, &ucParameterToPass, 3, &xHandle);
     // xTaskCreate(relay_task, "relay", 512, &ucParameterToPass, 3, &xHandle);
-}
-
-void display_task(void *pvParameters)
-{
-    for (;;)
-    {
-    }
 }
