@@ -1,8 +1,17 @@
 idf_component_register(SRCS 
-                        "relay_task.c"
-                        "spindle_active_task.c"
-                        "ADC_task.c"
+                            "spindle.c"
+                            "i2c.c"
+                            "display.c"
+                            "cnc_encoder.c"
                        INCLUDE_DIRS 
-                       "."
-                       "include"
-                       REQUIRES esp_timer  esp_driver_gpio)
+                            "."
+                            "include"
+                       REQUIRES 
+                            freertos
+                            esp_timer  
+                            esp_driver_gpio 
+                            esp_driver_i2c 
+                            esp_adc encoder
+                            esp_lcd 
+                            esp_lcd_ili9341
+                            encoder)

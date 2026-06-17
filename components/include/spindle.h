@@ -1,0 +1,8 @@
+#ifndef COMPONENTS_INCLUDE_SPINDLE
+#define COMPONENTS_INCLUDE_SPINDLE
+
+#define DEBOUNCE_TIME_US 50000
+
+void init_spindle_change(void);
+
+#endif  /* COMPONENTS_INCLUDE_SPINDLE */
