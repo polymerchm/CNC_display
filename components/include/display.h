@@ -11,4 +11,6 @@
 #include "hal/gpio_types.h"
 #include "hal/spi_types.h"
 
+esp_lcd_panel_handle_t init_lcd_display(void);
+
 #endif  /* COMPONENTS_INCLUDE_DISPLAY */

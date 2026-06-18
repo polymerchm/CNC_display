@@ -3,9 +3,10 @@
 #include "freertos/queue.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
-#include "../main/main.h"
+#include "../main/include/main.h"
 #include "spindle.h"
 #include "esp_timer.h"
+#include "esp_task_wdt.h"
 
 const char * TAG = "spindle";
 
@@ -25,14 +26,18 @@ static void IRAM_ATTR gpio_isr_handler(void* arg) {
         xQueueSendFromISR(spindle_event_queue, &gpio_num, NULL);
     }
     last_interrupt_time = interrupt_time;
+    portYIELD_FROM_ISR();
 }
 
 
 static void gpio_spindle_task(void* arg)
 {
     uint32_t io_num;
+    TickType_t xTicksToWait = pdMS_TO_TICKS(1000);
+    esp_task_wdt_add(NULL);
     for(;;) {
-        if(xQueueReceive(spindle_event_queue, &io_num, portMAX_DELAY)) {
+        
+        if(xQueueReceive(spindle_event_queue, &io_num, xTicksToWait) == pdPASS) {
             // Read current pin state to verify the logic level
             int pin_level = gpio_get_level(io_num); 
             ESP_LOGI(TAG, "Transition detected on GPIO[%lu]! Current Level: %d", io_num, pin_level);
@@ -45,6 +50,8 @@ static void gpio_spindle_task(void* arg)
                 // turn on all relays
                 // start counting the spindle time
             }
+        } else {
+              esp_task_wdt_reset();
         }
     }
 }

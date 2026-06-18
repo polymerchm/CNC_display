@@ -23,13 +23,16 @@
 #include <sys/lock.h>
 #include <sys/param.h>
 #include <esp_timer.h>
+#include "esp_task_wdt.h"
 
 
 #include "main.h"
 #include "i2c.h"
 #include "spindle.h"
 #include "cnc_encoder.h"
+#include "pcnt_encoder.h"
 #include "router.c"
+#include "display.h"
 
 static const char *TAG = "CNC";
 
@@ -168,111 +171,7 @@ static void lvgl_port_task(void *arg)
 }
 
 
-// static void init_spindle_change(void) {
-//        gpio_config_t gpio_io_conf = {
-//         .pin_bit_mask = (1ULL << spindle_sense_pin),
-//         .mode = GPIO_MODE_INPUT,
-//         .pull_up_en = GPIO_PULLUP_ENABLE, // Enable pull-up if using a floating button/sensor
-//         .pull_down_en = GPIO_PULLDOWN_DISABLE,
-//         .intr_type = GPIO_INTR_ANYEDGE // Trigger on both rising and falling edges
-//     };
-//     gpio_config(&gpio_io_conf);
 
-//     spindle_event_queue = xQueueCreate(10, sizeof(uint32_t));
-//     xTaskCreatePinnedToCore(gpio_spindle_task, "gpio_worker_task", 2048, NULL, 3, NULL,1);
-
-//     // 5. Initialize the per-pin ISR service and link the handler
-//     gpio_install_isr_service(0);
-//     gpio_isr_handler_add(spindle_sense_pin, gpio_isr_handler, (void*) spindle_sense_pin);
-
-//     ESP_LOGI(TAG, "Transition detection monitoring initialized.");
-// }
-
-
-// /* Rotory Encoder Section */
-
-// #define re_channel_a GPIO_NUM_25
-// #define re_channel_b GPIO_NUM_26
-// #define re_button    GPIO_NUM_2
-
-// #define RE_EVENT_QUEUE_LEN 5
-
-// QueueHandle_t re_event_queue;
-// rotary_encoder_handle_t re;
-
-
-// static void encoder_event_handler(const rotary_encoder_event_t *event, void *ctx)
-// {
-//     QueueHandle_t queue = (QueueHandle_t)ctx;
-//     xQueueSendToBack(queue, event, 0);
-// }
-
-// rotary_encoder_config_t re_config = {
-//     .pin_a = re_channel_a,
-//     .pin_b = re_channel_b,
-//     .pin_btn = re_button,
-//     .btn_pressed_level = 0, // active low
-//     .enable_internal_pullup = true, 
-//     .callback = encoder_event_handler,
-// };
-
-
-
-
-// void re_task(void *arg)
-// {
-//     // Create queue for rotary encoder events
-//     re_event_queue = xQueueCreate(RE_EVENT_QUEUE_LEN, sizeof(rotary_encoder_event_t));
-//     rotary_encoder_config_t re_config = {
-//     .pin_a = re_channel_a,
-//     .pin_b = re_channel_b,
-//     .pin_btn = re_button,
-//     .btn_pressed_level = 0, // active low
-//     .enable_internal_pullup = true, 
-//     // .btn_long_press_time_us = 500000,
-//     .callback = encoder_event_handler,
-//     .callback_ctx = re_event_queue  
-// };
-
-//     // Create an encoder
-  
-//     ESP_ERROR_CHECK(rotary_encoder_create(&re_config, &re));
-
-//     rotary_encoder_event_t e;
-//     int32_t val = 0;
-
-//     ESP_LOGI(TAG, "Initial value: %" PRIi32, val);
-//     while (1)
-//     {
-//         xQueueReceive(re_event_queue, &e, portMAX_DELAY);
-
-//         switch (e.type)
-//         {
-//             case RE_ET_BTN_PRESSED:
-//                 ESP_LOGI(TAG, "Button pressed");
-//                 break;
-//             case RE_ET_BTN_RELEASED:
-//                 ESP_LOGI(TAG, "Button released");
-//                 break;
-//             case RE_ET_BTN_CLICKED:
-//                 ESP_LOGI(TAG, "Button clicked");
-//                 rotary_encoder_enable_acceleration(re, 100);
-//                 ESP_LOGI(TAG, "Acceleration enabled");
-//                 break;
-//             case RE_ET_BTN_LONG_PRESSED:
-//                 ESP_LOGI(TAG, "Looooong pressed button");
-//                 rotary_encoder_disable_acceleration(re);
-//                 ESP_LOGI(TAG, "Acceleration disabled");
-//                 break;
-//             case RE_ET_CHANGED:
-//                 val += e.diff;
-//                 ESP_LOGI(TAG, "Value = %" PRIi32, val);
-//                 break;
-//             default:
-//                 break;
-//         }
-//     }
-// }
 
 
 
@@ -282,74 +181,16 @@ void app_main(void)
     i2c_handles_t i2c_handles = i2c_init();
     init_spindle_change();
     init_rotary_encoder();
-
-    // initialize the display/spi interfaces
-    // lcd_display_init();
-    // esp_lcd_panel_swap_xy(lcd_panel_handle,true);
-    // esp_lcd_panel_draw_bitmap(lcd_panel_handle, 0, 0, 240, 240, &router_map);
-    // vTaskDelay(2000/portTICK_PERIOD_MS);
-  
-
-    /*Initialize LVGL library*/
-    // lv_init();
-    // lv_obj_t * my_base_screen = lv_obj_create(NULL);
-    // lv_screen_load(my_base_screen);
-
-    // create a lvgl display
-    // lv_display_t *display = lv_display_create(LCD_H_RES, LCD_V_RES);
-
-    // alloc draw buffers used by LVGL
-    // it's recommended to choose the size of the draw buffer(s) to be at least 1/10 screen sized
-    // size_t draw_buffer_sz = LCD_H_RES * 20 * sizeof(lv_color16_t);
-    // void *buf1 = spi_bus_dma_memory_alloc(LCD_HOST, draw_buffer_sz, 0);
-    // void *buf2 = spi_bus_dma_memory_alloc(LCD_HOST, draw_buffer_sz, 0);
-
-    // initialize LVGL draw buffers
-    // lv_display_set_buffers(display, buf1, buf2, draw_buffer_sz, LV_DISPLAY_RENDER_MODE_PARTIAL);
+    esp_lcd_panel_handle_t lcd_handle = init_lcd_display();
     
-    // // associate the mipi panel handle to the display
-    // lv_display_set_user_data(display, lcd_panel_handle);
     
-    // // set color depth
-    // lv_display_set_color_format(display, LV_COLOR_FORMAT_RGB565);
-    
-    // // set the callback which can copy the rendered image to an area of the display
-    // lv_display_set_flush_cb(display, lvgl_flush_cb);
-    
-    // lv_display_set_rotation(display, LV_DISPLAY_ROTATION_180);
-
-    /* Install LVGL tick timer*/
-    // Tick interface for LVGL (using esp_timer to generate 2ms periodic event)
-    // const esp_timer_create_args_t lvgl_tick_timer_args = {
-    //     .callback = &lvgl_tick,
-    //     .name = "lvgl_tick"
-    // };
-    // esp_timer_handle_t lvgl_tick_timer = NULL;
-    // ESP_ERROR_CHECK(esp_timer_create(&lvgl_tick_timer_args, &lvgl_tick_timer));
-    // ESP_ERROR_CHECK(esp_timer_start_periodic(lvgl_tick_timer, LVGL_TICK_PERIOD_MS * 1000));
-
-    /*Register io panel event callback for LVGL flush ready notification*/
-    // const esp_lcd_panel_io_callbacks_t cbs = {
-    //     .on_color_trans_done = notify_lvgl_flush_ready,
-    // };
-    // ESP_ERROR_CHECK(esp_lcd_panel_io_register_event_callbacks(lcd_io_handle, &cbs, display));
-    
-    /* gpio init */
-    //init_spindle_change();
-
-    /* init the Re task */
-    //xTaskCreatePinnedToCore(re_task, TAG, configMINIMAL_STACK_SIZE * 8, NULL, 2, NULL, 1);
-
-
-
-
 	
     time_at_turn_on = 0;
     total_spindle_time = 0;
 
 	for(;;)
 	{
-        vTaskDelay(500/portTICK_PERIOD_MS);
+        vTaskDelay(1000/portTICK_PERIOD_MS);
 	}
     // // // initialize the I2C bus
     // xTaskCreate(ADC_task, "ADC_task", 512, &ucParameterToPass, 3, &xHandle);

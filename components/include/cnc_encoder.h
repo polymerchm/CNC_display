@@ -1,7 +1,7 @@
 #ifndef COMPONENTS_INCLUDE_CNC_ENCODER
 #define COMPONENTS_INCLUDE_CNC_ENCODER
 
-#include "../../main/main.h"
+#include "../../main/include/main.h"
 
 void init_rotary_encoder(void);
 
