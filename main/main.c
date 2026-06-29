@@ -368,13 +368,13 @@ void app_main(void)
         .panel_handle = panel,
         .buffer_size = DISP_WIDTH * 40,
         .double_buffer = true,
-        .hres = DISP_WIDTH,
-        .vres = DISP_HEIGHT,
+        .hres = DISP_HEIGHT,
+        .vres = DISP_WIDTH,
         .monochrome = false,
         .rotation = {
-            .swap_xy = false,
-            .mirror_x = false,
-            .mirror_y = false,
+            .swap_xy = true,
+            .mirror_x = true,
+            .mirror_y = true,
         },
         .color_format = LV_COLOR_FORMAT_RGB565,
         .flags = {
@@ -383,6 +383,7 @@ void app_main(void)
         },
     };
     lv_display_t *disp = lvgl_port_add_disp(&disp_cfg);
+    // lv_display_set_rotation(disp, LV_DISPLAY_ROTATION_90);
 
     lvgl_port_lock(0);
     build_ui(disp);
