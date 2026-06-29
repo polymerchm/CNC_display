@@ -32,15 +32,14 @@ static void encoder_event_handler(const rotary_encoder_event_t *event, void *ctx
 
 void re_task(void *arg)
 {
+
     // Create queue for rotary encoder events
     re_event_queue = xQueueCreate(RE_EVENT_QUEUE_LEN, sizeof(rotary_encoder_event_t));
     rotary_encoder_config_t re_config = {
         .pin_a = re_channel_a,
         .pin_b = re_channel_b,
-        .pin_btn = re_button,
-        .btn_pressed_level = 0, // active low
+        /* will deal with button bounce with schmidt triggers */
         .enable_internal_pullup = true,
-        // .btn_long_press_time_us = 500000,
         .callback = encoder_event_handler,
         .callback_ctx = re_event_queue};
 
@@ -53,8 +52,8 @@ void re_task(void *arg)
 
     ESP_LOGI(TAG, "Initial value: %" PRIi32, val);
 
-    TickType_t xTicksToWait = pdMS_TO_TICKS(1000);
-    esp_task_wdt_add(NULL);
+    TickType_t xTicksToWait = pdMS_TO_TICKS(100);
+    // esp_task_wdt_add(NULL);
     while (1)
     {
         if (xQueueReceive(re_event_queue, &e, xTicksToWait) == pdPASS)
@@ -88,12 +87,13 @@ void re_task(void *arg)
         }
         else
         {
-            esp_task_wdt_reset();
+                    // esp_task_wdt_reset(); 
+                    vTaskDelay(pdMS_TO_TICKS(1000));
         }
     }
 }
 
 void init_rotary_encoder(void)
 {
-    xTaskCreatePinnedToCore(re_task, TAG, configMINIMAL_STACK_SIZE * 8, NULL, 2, NULL, 1);
+    xTaskCreatePinnedToCore(re_task, TAG, configMINIMAL_STACK_SIZE * 8, NULL, 1, NULL, 1);
 }

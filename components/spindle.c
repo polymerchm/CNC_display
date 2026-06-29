@@ -8,10 +8,11 @@
 #include "esp_timer.h"
 #include "esp_task_wdt.h"
 
-const char * TAG = "spindle";
+static const char * TAG = "spindle";
 
 int spindle_sense_pin  = SPINDLE_PIN; 
 QueueHandle_t spindle_event_queue = NULL;
+uint8_t count = 0;
 
 
 // Debounced Interrupt Service Routine (ISR)
@@ -20,27 +21,25 @@ static void IRAM_ATTR gpio_isr_handler(void* arg) {
     static int64_t last_interrupt_time = 0;
     int64_t interrupt_time = esp_timer_get_time();
     
-    // If interrupts come faster than 50ms, assume it's a bounce and ignore
-    if (interrupt_time - last_interrupt_time > DEBOUNCE_TIME_US) {
+    // If interrupts come faster than ms, assume it's a bounce and ignore
+    if (interrupt_time - last_interrupt_time > /*DEBOUNCE_TIME_US*/ 9000) {
         uint32_t gpio_num = (uint32_t) arg;
+        count++;
         xQueueSendFromISR(spindle_event_queue, &gpio_num, NULL);
     }
     last_interrupt_time = interrupt_time;
-    portYIELD_FROM_ISR();
 }
 
 
 static void gpio_spindle_task(void* arg)
 {
     uint32_t io_num;
-    TickType_t xTicksToWait = pdMS_TO_TICKS(1000);
-    esp_task_wdt_add(NULL);
+    TickType_t xTicksToWait = pdMS_TO_TICKS(500);
     for(;;) {
-        
         if(xQueueReceive(spindle_event_queue, &io_num, xTicksToWait) == pdPASS) {
             // Read current pin state to verify the logic level
             int pin_level = gpio_get_level(io_num); 
-            ESP_LOGI(TAG, "Transition detected on GPIO[%lu]! Current Level: %d", io_num, pin_level);
+            ESP_LOGI(TAG, "Transition detected on GPIO[%lu]! Current Level: %d count %d", io_num, pin_level, count);
             // here is where you set the relays!!!
             if (pin_level == 0) {
                 // turn off all relays
@@ -50,9 +49,8 @@ static void gpio_spindle_task(void* arg)
                 // turn on all relays
                 // start counting the spindle time
             }
-        } else {
-              esp_task_wdt_reset();
-        }
+        } 
+        vTaskDelay(1 / portTICK_PERIOD_MS);
     }
 }
 

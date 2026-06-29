@@ -1,11 +1,10 @@
 idf_component_register(SRCS 
                             "spindle.c"
-                            "i2c.c"
+                            "cnc_i2c.c"
                             "display.c"
                             "cnc_encoder.c"
-                            "router.c"
+                           
                             "logo.c"
-                            "pcnt_encoder.c"
                        INCLUDE_DIRS 
                             "."
                             "include"
@@ -18,6 +17,6 @@ idf_component_register(SRCS
                             esp_lcd 
                             esp_lcd_ili9341
                             encoder
-                            esp_driver_pcnt
+    
                            
                   )

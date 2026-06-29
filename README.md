@@ -11,7 +11,7 @@ Rev 0:
     using a rotory encoder to change the desired spindle speed (  programs the to the DAC)
     
     monitors the T1 line for spindle turn on
-        GPIO line XXX pulled up, looking for active low (toggles on any change)
+        GPIO line 403 pulled up, looking for active low (toggles on any change)
         ISR is debounced
     accumulates the spindle time since bootup
         task running in background when spindle is on.
