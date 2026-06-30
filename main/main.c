@@ -6,21 +6,20 @@
 #include "esp_timer.h"
 
 #include "driver/gpio.h"
+#include "hal/gpio_types.h"
 #include "esp_adc/adc_oneshot.h"
 #include "driver/i2c_master.h"
 #include "encoder.h"
 
+
+#include "driver/spi_master.h"
+#include "hal/spi_types.h"
 #include "esp_lcd_ili9341.h"
-#include "esp_lcd_panel_commands.h"
-#include "esp_lcd_panel_dev.h"
-#include "esp_lcd_panel_interface.h"
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_panel_vendor.h"
-#include "hal/gpio_types.h"
-#include "hal/spi_types.h"
-// #include "lvgl.h"
 #include "esp_lvgl_port.h"
+
 #include <sys/lock.h>
 #include <sys/param.h>
 #include <esp_timer.h>
@@ -32,9 +31,10 @@
 #include "cnc_i2c.h"
 #include "spindle.h"
 #include "cnc_encoder.h"
-#include "display.h"
 
 #include "../components/router.c"
+#include "../components/led_red.c"
+#include "../components/led_green.c"
 
 static const char *TAG = "CNC";
 
@@ -56,7 +56,6 @@ LCD (SPI)
     PBKL 4
     LCD_CS 5
     CLK  18
-    MISO 19
     LCD_DC 21
     RST  22
     MOSI 23
@@ -74,7 +73,6 @@ ROTARY ENCODER
 #define ADC_ADDR (0x48)
 #define RELAY_ADDR (0x3F)
 #define DAC_ADDR (0x5f)
-
 
 /*==========================================================*/
 /*====================== globals ===========================*/
@@ -98,18 +96,30 @@ int event_count = 0;
 
 /* lcd * */
 
-esp_lcd_panel_io_handle_t io_handle = NULL;
+// Pin map matches diagram.json
+#define PIN_MOSI 23
+#define PIN_SCK 18
+#define PIN_CS 5
+#define PIN_DC 21
+#define PIN_RST 22
 
-#define DISP_WIDTH 240
-#define DISP_HEIGHT 320
+#define LCD_HOST SPI2_HOST
+#define LCD_PCLK_HZ (40 * 1000 * 1000)
+// Native portrait orientation of the ILI9341 panel.
+#define LCD_WIDTH 240
+#define LCD_HEIGHT 320
 
 /* lvgl */
 
 // LVGL library is not thread-safe, this will call LVGL APIs from different tasks, so use a mutex to protect it
-static _lock_t lvgl_api_lock;
-lv_obj_t *text_label = NULL;
+// static _lock_t lvgl_api_lock;
+lv_obj_t *tstatus = NULL;
 
 const lvgl_port_cfg_t lvgl_cfg = ESP_LVGL_PORT_INIT_CONFIG();
+
+char buffer_spindle[40] = "";
+char buffer_program[40] = "";
+char buffer_actual[40] = "";
 
 /* i2c */
 
@@ -193,80 +203,6 @@ static int watch_points[] = {-10, 0, 10};
 /*====================== functions  ========================*/
 /*==========================================================*/
 
-/********************* LVGL *************************/
-
-static bool notify_lvgl_flush_ready(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_io_event_data_t *edata, void *user_ctx)
-{
-    lv_display_t *disp = (lv_display_t *)user_ctx;
-    lv_display_flush_ready(disp);
-    return false;
-}
-
-/* Rotate display and touch, when rotated screen in LVGL. Called when driver parameters are updated. */
-static void lvgl_port_update_callback(lv_display_t *disp)
-{
-    esp_lcd_panel_handle_t panel_handle = lv_display_get_user_data(disp);
-    lv_display_rotation_t rotation = lv_display_get_rotation(disp);
-
-    switch (rotation)
-    {
-    case LV_DISPLAY_ROTATION_0:
-        // Rotate LCD display
-        esp_lcd_panel_swap_xy(panel_handle, false);
-        esp_lcd_panel_mirror(panel_handle, true, false);
-        break;
-    case LV_DISPLAY_ROTATION_90:
-        // Rotate LCD display
-        esp_lcd_panel_swap_xy(panel_handle, true);
-        esp_lcd_panel_mirror(panel_handle, true, true);
-        break;
-    case LV_DISPLAY_ROTATION_180:
-        // Rotate LCD display
-        esp_lcd_panel_swap_xy(panel_handle, false);
-        esp_lcd_panel_mirror(panel_handle, false, true);
-        break;
-    case LV_DISPLAY_ROTATION_270:
-        // Rotate LCD display
-        esp_lcd_panel_swap_xy(panel_handle, true);
-        esp_lcd_panel_mirror(panel_handle, false, false);
-        break;
-    }
-}
-
-static void lvgl_flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
-{
-    lvgl_port_update_callback(disp);
-    esp_lcd_panel_handle_t panel_handle = lv_display_get_user_data(disp);
-    int offsetx1 = area->x1;
-    int offsetx2 = area->x2;
-    int offsety1 = area->y1;
-    int offsety2 = area->y2;
-    // because SPI LCD is big-endian, we need to swap the RGB bytes order
-    lv_draw_sw_rgb565_swap(px_map, (offsetx2 + 1 - offsetx1) * (offsety2 + 1 - offsety1));
-    // copy a buffer's content to a specific area of the display
-    esp_lcd_panel_draw_bitmap(panel_handle, offsetx1, offsety1, offsetx2 + 1, offsety2 + 1, px_map);
-}
-
-static void lvgl_tick(void *arg) // used in lvgl create timer
-{
-    /* Tell LVGL how many milliseconds has elapsed */
-    lv_tick_inc(LVGL_TICK_PERIOD_MS);
-}
-
-static void lvgl_port_task(void *arg)
-{
-    uint32_t time_till_next_ms = 0;
-    uint32_t time_threshold_ms = 2000 / CONFIG_FREERTOS_HZ;
-    while (1)
-    {
-        _lock_acquire(&lvgl_api_lock);
-        time_till_next_ms = lv_timer_handler();
-        _lock_release(&lvgl_api_lock);
-        // in case of triggering a task watch dog time out
-        time_till_next_ms = MAX(time_till_next_ms, time_threshold_ms);
-        vTaskDelay(time_till_next_ms);
-    }
-}
 
 /**************** encoder *******************/
 
@@ -280,35 +216,61 @@ static bool pcnt_on_reach(pcnt_unit_handle_t unit, const pcnt_watch_event_data_t
     return (high_task_wakeup == pdTRUE);
 }
 
-
 /* UI */
-static lv_obj_t *tick_label;
+static lv_obj_t *status = NULL;
+static lv_obj_t *elapsed_time = NULL;
 
-static void build_ui(lv_display_t *disp) {
+static void build_ui(lv_display_t *disp)
+{
     lv_obj_t *scr = lv_display_get_screen_active(disp);
     lv_obj_set_style_bg_color(scr, lv_color_hex(0x06102A), LV_PART_MAIN);
 
+    int offset = 20;
+    int delta = 40;
+
     lv_obj_t *title = lv_label_create(scr);
-    lv_label_set_text(title, "Hello ESP32-S31");
+    lv_label_set_text(title, "TechnoCNC Speed Control");
     lv_obj_set_style_text_font(title, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(title, lv_color_hex(0xFFC83D), 0);
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 60);
+    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, offset);
+    offset += delta;
 
-    lv_obj_t *sub = lv_label_create(scr);
-    lv_label_set_text(sub, "Welcome to Wokwi!");
-    lv_obj_set_style_text_font(sub, &lv_font_montserrat_18, 0);
-    lv_obj_set_style_text_color(sub, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_align(sub, LV_ALIGN_TOP_MID, 0, 102);
+    lv_obj_t *actual_speed = lv_label_create(scr);
+    lv_label_set_text(actual_speed, "Current Speed= ******");
+    lv_obj_set_style_text_font(actual_speed, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(actual_speed, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_align(actual_speed, LV_ALIGN_TOP_MID, 0, offset);
+    offset += delta;
 
-    tick_label = lv_label_create(scr);
-    lv_label_set_text(tick_label, "Tick: 0");
-    lv_obj_set_style_text_font(tick_label, &lv_font_montserrat_36, 0);
-    lv_obj_set_style_text_color(tick_label, lv_color_hex(0x32E6C3), 0);
-    lv_obj_align(tick_label, LV_ALIGN_CENTER, 0, 60);
+    lv_obj_t *program_speed = lv_label_create(scr);
+    lv_label_set_text(program_speed, "Program Speed= ******");
+    lv_obj_set_style_text_font(program_speed, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(program_speed, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_align(program_speed, LV_ALIGN_TOP_MID, 0, offset);
+    offset += delta;
+
+    elapsed_time = lv_label_create(scr);
+    lv_label_set_text(elapsed_time, "Elapsed Time= ******");
+    lv_obj_set_style_text_font(elapsed_time, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(elapsed_time, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_align(elapsed_time, LV_ALIGN_TOP_MID, 0, offset);
+    offset += delta;
+
+    status = lv_label_create(scr);
+    lv_label_set_text(status, "RUNNING");
+    lv_obj_set_style_text_font(status, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(status, lv_color_hex(0xFF0000), 0);
+    lv_obj_align(status, LV_ALIGN_BOTTOM_MID, 0, -10);
 }
 /*
  *   ======================== APP_MAIN =========================
  */
+
+
+int monitor = 0;
+int last_count = 0;
+lv_display_t *disp = NULL;
+
 
 void app_main(void)
 {
@@ -345,31 +307,51 @@ void app_main(void)
     ESP_LOGI(TAG, "start pcnt unit");
     ESP_ERROR_CHECK(pcnt_unit_start(pcnt_unit));
 
-    // init_spindle_change();
+    // // init_spindle_change();
 
     ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_config, &bus_handle));
     ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &relay_i2C_cfg, &relays));
 
     ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_buffer, sizeof(relay_buffer), -1));
 
-    // /**************************** LCD ************************ */
+    /**************************** LCD ************************ */
 
-    lcd_user_data_t user_data= init_lcd_display();
-    esp_lcd_panel_io_handle_t io = user_data.io;
-    esp_lcd_panel_handle_t panel = user_data.panel;
-    esp_lcd_panel_draw_bitmap(panel, 0, 0, 240, 320, &router_map);
-    vTaskDelay(5000 / portTICK_PERIOD_MS);
+    ESP_LOGI(TAG, "Hello ESP32-S31");
+    ESP_LOGI(TAG, "Initialising SPI bus on host %d (MOSI=%d, SCK=%d)", LCD_HOST, PIN_MOSI, PIN_SCK);
 
+    spi_bus_config_t buscfg = ILI9341_PANEL_BUS_SPI_CONFIG(PIN_SCK, PIN_MOSI,
+                                                           LCD_HEIGHT * 40 * sizeof(uint16_t));
+    ESP_ERROR_CHECK(spi_bus_initialize(LCD_HOST, &buscfg, SPI_DMA_CH_AUTO));
+
+    ESP_LOGI(TAG, "Installing panel IO (CS=%d, DC=%d, pclk=%d Hz)", PIN_CS, PIN_DC, LCD_PCLK_HZ);
+    esp_lcd_panel_io_handle_t io = NULL;
+    esp_lcd_panel_io_spi_config_t io_config = ILI9341_PANEL_IO_SPI_CONFIG(PIN_CS, PIN_DC, NULL, NULL);
+    ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)LCD_HOST, &io_config, &io));
+
+    ESP_LOGI(TAG, "Installing ILI9341 panel (RST=%d)", PIN_RST);
+    esp_lcd_panel_handle_t panel = NULL;
+    esp_lcd_panel_dev_config_t panel_config = {
+        .reset_gpio_num = PIN_RST,
+        .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_BGR,
+        .bits_per_pixel = 16,
+    };
+    ESP_ERROR_CHECK(esp_lcd_new_panel_ili9341(io, &panel_config, &panel));
+
+    ESP_ERROR_CHECK(esp_lcd_panel_reset(panel));
+    ESP_ERROR_CHECK(esp_lcd_panel_init(panel));
+    ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel, true));
+
+    ESP_LOGI(TAG, "Starting LVGL port...");
     const lvgl_port_cfg_t lvgl_cfg = ESP_LVGL_PORT_INIT_CONFIG();
-    esp_err_t err = lvgl_port_init(&lvgl_cfg);
+    ESP_ERROR_CHECK(lvgl_port_init(&lvgl_cfg));
 
     const lvgl_port_display_cfg_t disp_cfg = {
         .io_handle = io,
         .panel_handle = panel,
-        .buffer_size = DISP_WIDTH * 40,
+        .buffer_size = LCD_WIDTH * 40,
         .double_buffer = true,
-        .hres = DISP_HEIGHT,
-        .vres = DISP_WIDTH,
+        .hres = LCD_HEIGHT,
+        .vres = LCD_WIDTH,
         .monochrome = false,
         .rotation = {
             .swap_xy = true,
@@ -382,15 +364,18 @@ void app_main(void)
             .swap_bytes = true,
         },
     };
-    lv_display_t *disp = lvgl_port_add_disp(&disp_cfg);
-    // lv_display_set_rotation(disp, LV_DISPLAY_ROTATION_90);
+    disp = lvgl_port_add_disp(&disp_cfg);
 
     lvgl_port_lock(0);
     build_ui(disp);
     lvgl_port_unlock();
 
-    int last_count = 0;
-    for (;;)
+    char buf[32];
+    int tick = 0;
+    
+    // esp_lcd_panel_draw_bitmap(panel, 0, 0, 240, 320, &router_map);
+    vTaskDelay(5000 / portTICK_PERIOD_MS);
+    while (1)
     {
         if (xQueueReceive(queue, &event_count, pdMS_TO_TICKS(1000)))
         {
@@ -399,33 +384,46 @@ void app_main(void)
         else
         {
             ESP_ERROR_CHECK(pcnt_unit_get_count(pcnt_unit, &pulse_count));
-            if (pulse_count != last_count){
-            ESP_LOGI(TAG, "Pulse count: %d", pulse_count);
-            last_count = pulse_count;
+            if (pulse_count != last_count)
+            {
+                ESP_LOGI(TAG, "Pulse count: %d", pulse_count);
+                last_count = pulse_count;
             }
         }
-        // snprintf(buf, sizeof(buf), "Tick: %d", tick);
-        // ESP_LOGI(TAG, "%s", buf);
-        // if (lvgl_port_lock(100)) {
-        //     lv_label_set_text(tick_label, buf);
-        //     lvgl_port_unlock();
-        // }
-        // relay_buffer = 0x10;
-        // relay_buffer = ~relay_buffer;
-        // ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_buffer, 1, -1));
-        // vTaskDelay(1000/portTICK_PERIOD_MS);
-        // relay_buffer = 0x20;
-        // relay_buffer = ~relay_buffer;
-        // ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_buffer, 1, -1));
-        // vTaskDelay(1000/portTICK_PERIOD_MS);
-        // relay_buffer = 0x40;
-        // relay_buffer = ~relay_buffer;
-        // ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_buffer, 1, -1));
-        // vTaskDelay(1000/portTICK_PERIOD_MS);
-        // relay_buffer = 0x80;
-        // relay_buffer = ~relay_buffer;
-        // ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_buffer, 1, -1));
-        vTaskDelay(500 / portTICK_PERIOD_MS);
+        monitor++;
+        char *buffer = ((monitor % 2)) == 0 ? "OFF" : "ON";
+        ESP_LOGI(TAG, "buffer is %s", buffer);
+        if (lvgl_port_lock(100))
+        {
+            lv_obj_set_style_text_color(status,
+                (monitor % 2 == 0 ? lv_color_hex(0xFF0000) : lv_color_hex(0x00FF00)),0);
+            // // // // //     0);
+            lv_label_set_text(status, buffer);
+            lv_label_set_text_fmt(elapsed_time, "Pulse Count %d", pulse_count);
+
+            lvgl_port_unlock();
+
+        }
+        else
+        {
+            ESP_LOGI(TAG, "Could l=not get lvgl_lock");
+        }
+        relay_buffer = 0x10;
+        relay_buffer = ~relay_buffer;
+        ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_buffer, 1, -1));
+        vTaskDelay(1000/portTICK_PERIOD_MS);
+        relay_buffer = 0x20;
+        relay_buffer = ~relay_buffer;
+        ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_buffer, 1, -1));
+        vTaskDelay(1000/portTICK_PERIOD_MS);
+        relay_buffer = 0x40;
+        relay_buffer = ~relay_buffer;
+        ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_buffer, 1, -1));
+        vTaskDelay(1000/portTICK_PERIOD_MS);
+        relay_buffer = 0x80;
+        relay_buffer = ~relay_buffer;
+        ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_buffer, 1, -1));
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
     // // // initialize the I2C bus
     // xTaskCreate(ADC_task, "ADC_task", 512, &ucParameterToPass, 3, &xHandle);

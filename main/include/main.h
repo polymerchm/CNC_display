@@ -7,17 +7,14 @@
 /* GPIO */
 
 #define SPINDLE_PIN GPIO_NUM_32
-#define LCD_HOST SPI3_HOST // VSPI
 #define PIN_NUM_SCLK 18
 #define PIN_NUM_MOSI 23
-#define PIN_NUM_MISO 19
 #define PIN_NUM_LCD_CS 5
 #define PIN_NUM_BKL 4
 #define PIN_NUM_RST 22
 #define PIN_NUM_LCD_DC 21
 
-#define LCD_H_RES 320
-#define LCD_V_RES 240
+#define LCD_HOST SPI2_HOST
 #define LCD_PIXEL_CLOCK_HZ 20 * 1000 * 1000
 #define LCD_CMD_BITS 8
 #define LCD_PARAM_BITS 8
