@@ -11,7 +11,6 @@
 #include "driver/i2c_master.h"
 #include "encoder.h"
 
-
 #include "driver/spi_master.h"
 #include "hal/spi_types.h"
 #include "esp_lcd_ili9341.h"
@@ -31,10 +30,6 @@
 #include "cnc_i2c.h"
 #include "spindle.h"
 #include "cnc_encoder.h"
-
-#include "../components/router.c"
-#include "../components/led_red.c"
-#include "../components/led_green.c"
 
 static const char *TAG = "CNC";
 
@@ -203,7 +198,6 @@ static int watch_points[] = {-10, 0, 10};
 /*====================== functions  ========================*/
 /*==========================================================*/
 
-
 /**************** encoder *******************/
 
 /* callback on watch counts */
@@ -219,44 +213,66 @@ static bool pcnt_on_reach(pcnt_unit_handle_t unit, const pcnt_watch_event_data_t
 /* UI */
 static lv_obj_t *status = NULL;
 static lv_obj_t *elapsed_time = NULL;
+static lv_obj_t *primary_screen = NULL;
+static lv_obj_t *splash = NULL;
 
-static void build_ui(lv_display_t *disp)
+static void splash_timer_cb(lv_timer_t *timer)
 {
-    lv_obj_t *scr = lv_display_get_screen_active(disp);
-    lv_obj_set_style_bg_color(scr, lv_color_hex(0x06102A), LV_PART_MAIN);
+    lv_timer_del(timer);
+    vTaskDelay(2000 / portTICK_PERIOD_MS);
+
+    // load_new_screen_with_fade(scr);
+    lv_scr_load(primary_screen);
+
+    lv_obj_del(splash);
+}
+
+static void build_splash()
+{
+    splash = lv_obj_create(NULL);
+    // 2. Create the image widget, setting the active screen as the parent
+    lv_obj_set_style_bg_color(splash, lv_color_hex(0xFF0000), LV_PART_MAIN);
+
+    lv_timer_create(splash_timer_cb, 3000, NULL);
+}
+
+static void build_ui()
+{
+    primary_screen = lv_obj_create(NULL);
+    lv_obj_set_style_bg_color(primary_screen, lv_color_hex(0x06102A), LV_PART_MAIN);
 
     int offset = 20;
     int delta = 40;
 
-    lv_obj_t *title = lv_label_create(scr);
+    lv_obj_t *title = lv_label_create(primary_screen);
     lv_label_set_text(title, "TechnoCNC Speed Control");
     lv_obj_set_style_text_font(title, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(title, lv_color_hex(0xFFC83D), 0);
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, offset);
     offset += delta;
 
-    lv_obj_t *actual_speed = lv_label_create(scr);
+    lv_obj_t *actual_speed = lv_label_create(primary_screen);
     lv_label_set_text(actual_speed, "Current Speed= ******");
     lv_obj_set_style_text_font(actual_speed, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(actual_speed, lv_color_hex(0xFFFFFF), 0);
     lv_obj_align(actual_speed, LV_ALIGN_TOP_MID, 0, offset);
     offset += delta;
 
-    lv_obj_t *program_speed = lv_label_create(scr);
+    lv_obj_t *program_speed = lv_label_create(primary_screen);
     lv_label_set_text(program_speed, "Program Speed= ******");
     lv_obj_set_style_text_font(program_speed, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(program_speed, lv_color_hex(0xFFFFFF), 0);
     lv_obj_align(program_speed, LV_ALIGN_TOP_MID, 0, offset);
     offset += delta;
 
-    elapsed_time = lv_label_create(scr);
+    elapsed_time = lv_label_create(primary_screen);
     lv_label_set_text(elapsed_time, "Elapsed Time= ******");
     lv_obj_set_style_text_font(elapsed_time, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(elapsed_time, lv_color_hex(0xFFFFFF), 0);
     lv_obj_align(elapsed_time, LV_ALIGN_TOP_MID, 0, offset);
     offset += delta;
 
-    status = lv_label_create(scr);
+    status = lv_label_create(primary_screen);
     lv_label_set_text(status, "RUNNING");
     lv_obj_set_style_text_font(status, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(status, lv_color_hex(0xFF0000), 0);
@@ -266,11 +282,23 @@ static void build_ui(lv_display_t *disp)
  *   ======================== APP_MAIN =========================
  */
 
-
 int monitor = 0;
 int last_count = 0;
 lv_display_t *disp = NULL;
 
+void update_scr_cb(lv_timer_t *timer)
+{
+    char *buffer = ((monitor % 2)) == 0 ? "ON" : "OFF";
+    if (lvgl_port_lock(100))
+    {
+        lv_obj_set_style_text_color(status,
+                (monitor % 2 == 0 ? lv_color_hex(0xFF0000) : lv_color_hex(0x0000FF)), 0);
+        lv_label_set_text_fmt(elapsed_time, "Pulse Count %d", pulse_count);
+        lv_label_set_text(status, buffer);
+    } else {
+        ESP_LOGI(TAG, "Cound not get the lock");
+    }
+}
 
 void app_main(void)
 {
@@ -332,7 +360,7 @@ void app_main(void)
     esp_lcd_panel_handle_t panel = NULL;
     esp_lcd_panel_dev_config_t panel_config = {
         .reset_gpio_num = PIN_RST,
-        .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_BGR,
+        .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_RGB,
         .bits_per_pixel = 16,
     };
     ESP_ERROR_CHECK(esp_lcd_new_panel_ili9341(io, &panel_config, &panel));
@@ -358,25 +386,28 @@ void app_main(void)
             .mirror_x = true,
             .mirror_y = true,
         },
-        .color_format = LV_COLOR_FORMAT_RGB565,
         .flags = {
             .buff_dma = true,
-            .swap_bytes = true,
         },
     };
     disp = lvgl_port_add_disp(&disp_cfg);
 
-    lvgl_port_lock(0);
-    build_ui(disp);
-    lvgl_port_unlock();
-
     char buf[32];
     int tick = 0;
-    
-    // esp_lcd_panel_draw_bitmap(panel, 0, 0, 240, 320, &router_map);
-    vTaskDelay(5000 / portTICK_PERIOD_MS);
+
+    // esp_lcd_panel_draw_bitmap(panel, 0, 0, (int)router.header.w, (int)router.header.h, &router_map);
+    lvgl_port_lock(0);
+    build_ui();
+    build_splash();
+    lv_scr_load(splash);
+    lvgl_port_unlock();
+
+    // // Create an LVGL timer to wait 3 seconds (3000 ms) before loading the main screen
+    lv_timer_t * refresh_timer = lv_timer_create(update_scr_cb, 30, NULL);
+
     while (1)
     {
+        lv_task_handler();
         if (xQueueReceive(queue, &event_count, pdMS_TO_TICKS(1000)))
         {
             ESP_LOGI(TAG, "Watch point event, count: %d", event_count);
@@ -391,38 +422,23 @@ void app_main(void)
             }
         }
         monitor++;
-        char *buffer = ((monitor % 2)) == 0 ? "OFF" : "ON";
-        ESP_LOGI(TAG, "buffer is %s", buffer);
-        if (lvgl_port_lock(100))
-        {
-            lv_obj_set_style_text_color(status,
-                (monitor % 2 == 0 ? lv_color_hex(0xFF0000) : lv_color_hex(0x00FF00)),0);
-            // // // // //     0);
-            lv_label_set_text(status, buffer);
-            lv_label_set_text_fmt(elapsed_time, "Pulse Count %d", pulse_count);
+        
 
-            lvgl_port_unlock();
-
-        }
-        else
-        {
-            ESP_LOGI(TAG, "Could l=not get lvgl_lock");
-        }
-        relay_buffer = 0x10;
-        relay_buffer = ~relay_buffer;
-        ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_buffer, 1, -1));
-        vTaskDelay(1000/portTICK_PERIOD_MS);
-        relay_buffer = 0x20;
-        relay_buffer = ~relay_buffer;
-        ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_buffer, 1, -1));
-        vTaskDelay(1000/portTICK_PERIOD_MS);
-        relay_buffer = 0x40;
-        relay_buffer = ~relay_buffer;
-        ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_buffer, 1, -1));
-        vTaskDelay(1000/portTICK_PERIOD_MS);
-        relay_buffer = 0x80;
-        relay_buffer = ~relay_buffer;
-        ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_buffer, 1, -1));
+        // relay_buffer = 0x10;
+        // relay_buffer = ~relay_buffer;
+        // ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_buffer, 1, -1));
+        // vTaskDelay(1000/portTICK_PERIOD_MS);
+        // relay_buffer = 0x20;
+        // relay_buffer = ~relay_buffer;
+        // ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_buffer, 1, -1));
+        // vTaskDelay(1000/portTICK_PERIOD_MS);
+        // relay_buffer = 0x40;
+        // relay_buffer = ~relay_buffer;
+        // ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_buffer, 1, -1));
+        // vTaskDelay(1000/portTICK_PERIOD_MS);
+        // relay_buffer = 0x80;
+        // relay_buffer = ~relay_buffer;
+        // ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_buffer, 1, -1));
         vTaskDelay(pdMS_TO_TICKS(100));
     }
     // // // initialize the I2C bus

@@ -1,7 +1,6 @@
 idf_component_register(SRCS 
                             "spindle.c"
                             "cnc_i2c.c"
-                           
                             "cnc_encoder.c"
                             "logo.c"
                        INCLUDE_DIRS 
