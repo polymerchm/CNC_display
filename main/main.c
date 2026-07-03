@@ -211,17 +211,21 @@ static bool pcnt_on_reach(pcnt_unit_handle_t unit, const pcnt_watch_event_data_t
 }
 
 /* UI */
+
+
 static lv_obj_t *status = NULL;
 static lv_obj_t *elapsed_time = NULL;
 static lv_obj_t *primary_screen = NULL;
 static lv_obj_t *splash = NULL;
+
+
 
 static void splash_timer_cb(lv_timer_t *timer)
 {
     lv_timer_del(timer);
     vTaskDelay(2000 / portTICK_PERIOD_MS);
 
-    // load_new_screen_with_fade(scr);
+
     lv_scr_load(primary_screen);
 
     lv_obj_del(splash);
@@ -285,16 +289,21 @@ static void build_ui()
 int monitor = 0;
 int last_count = 0;
 lv_display_t *disp = NULL;
+int last_pulse_count = 0;
 
 void update_scr_cb(lv_timer_t *timer)
 {
     char *buffer = ((monitor % 2)) == 0 ? "ON" : "OFF";
     if (lvgl_port_lock(100))
     {
+        lv_label_set_text(status, buffer);
         lv_obj_set_style_text_color(status,
                 (monitor % 2 == 0 ? lv_color_hex(0xFF0000) : lv_color_hex(0x0000FF)), 0);
-        lv_label_set_text_fmt(elapsed_time, "Pulse Count %d", pulse_count);
-        lv_label_set_text(status, buffer);
+     
+        if (last_pulse_count != pulse_count) {
+            lv_label_set_text_fmt(elapsed_time, "Pulse Count %d", pulse_count);
+            last_pulse_count = pulse_count;
+        }
     } else {
         ESP_LOGI(TAG, "Cound not get the lock");
     }
@@ -391,6 +400,7 @@ void app_main(void)
         },
     };
     disp = lvgl_port_add_disp(&disp_cfg);
+
 
     char buf[32];
     int tick = 0;
