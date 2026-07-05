@@ -3,5 +3,3 @@ dependencies:
   lvgl/lvgl: ^8.4.0
   esp-idf-lib/encoder: ^3.0.2
   espressif/esp_lvgl_port: "^2.8.0~1"
-
-

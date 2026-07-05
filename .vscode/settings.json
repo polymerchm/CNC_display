@@ -16,5 +16,6 @@
     "--query-driver=**",
     "--compile-commands-dir=/Users/spollack/programming/esp/projects/CNC_display/build"
   ],
-  "idf.flashType": "UART"
+  "idf.flashType": "UART",
+  "C_Cpp.default.compilerPath": "/usr/bin/clang"
 }

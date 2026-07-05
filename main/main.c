@@ -30,6 +30,8 @@
 #include "cnc_i2c.h"
 #include "spindle.h"
 #include "cnc_encoder.h"
+#include "UI/ui.h"
+
 
 static const char *TAG = "CNC";
 
@@ -65,9 +67,9 @@ ROTARY ENCODER
 #define SCL GPIO_NUM_17
 
 /* IIC devices */
-#define ADC_ADDR (0x48)
-#define RELAY_ADDR (0x3F)
-#define DAC_ADDR (0x5f)
+#define ADC_ADDR    (0x48)
+#define RELAY_ADDR  (0x3F)
+#define DAC_ADDR    (0x60)
 
 /*==========================================================*/
 /*====================== globals ===========================*/
@@ -213,75 +215,6 @@ static bool pcnt_on_reach(pcnt_unit_handle_t unit, const pcnt_watch_event_data_t
 /* UI */
 
 
-static lv_obj_t *status = NULL;
-static lv_obj_t *elapsed_time = NULL;
-static lv_obj_t *primary_screen = NULL;
-static lv_obj_t *splash = NULL;
-
-
-
-static void splash_timer_cb(lv_timer_t *timer)
-{
-    lv_timer_del(timer);
-    vTaskDelay(2000 / portTICK_PERIOD_MS);
-
-
-    lv_scr_load(primary_screen);
-
-    lv_obj_del(splash);
-}
-
-static void build_splash()
-{
-    splash = lv_obj_create(NULL);
-    // 2. Create the image widget, setting the active screen as the parent
-    lv_obj_set_style_bg_color(splash, lv_color_hex(0xFF0000), LV_PART_MAIN);
-
-    lv_timer_create(splash_timer_cb, 3000, NULL);
-}
-
-static void build_ui()
-{
-    primary_screen = lv_obj_create(NULL);
-    lv_obj_set_style_bg_color(primary_screen, lv_color_hex(0x06102A), LV_PART_MAIN);
-
-    int offset = 20;
-    int delta = 40;
-
-    lv_obj_t *title = lv_label_create(primary_screen);
-    lv_label_set_text(title, "TechnoCNC Speed Control");
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_24, 0);
-    lv_obj_set_style_text_color(title, lv_color_hex(0xFFC83D), 0);
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, offset);
-    offset += delta;
-
-    lv_obj_t *actual_speed = lv_label_create(primary_screen);
-    lv_label_set_text(actual_speed, "Current Speed= ******");
-    lv_obj_set_style_text_font(actual_speed, &lv_font_montserrat_24, 0);
-    lv_obj_set_style_text_color(actual_speed, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_align(actual_speed, LV_ALIGN_TOP_MID, 0, offset);
-    offset += delta;
-
-    lv_obj_t *program_speed = lv_label_create(primary_screen);
-    lv_label_set_text(program_speed, "Program Speed= ******");
-    lv_obj_set_style_text_font(program_speed, &lv_font_montserrat_24, 0);
-    lv_obj_set_style_text_color(program_speed, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_align(program_speed, LV_ALIGN_TOP_MID, 0, offset);
-    offset += delta;
-
-    elapsed_time = lv_label_create(primary_screen);
-    lv_label_set_text(elapsed_time, "Elapsed Time= ******");
-    lv_obj_set_style_text_font(elapsed_time, &lv_font_montserrat_24, 0);
-    lv_obj_set_style_text_color(elapsed_time, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_align(elapsed_time, LV_ALIGN_TOP_MID, 0, offset);
-    offset += delta;
-
-    status = lv_label_create(primary_screen);
-    lv_label_set_text(status, "RUNNING");
-    lv_obj_set_style_text_font(status, &lv_font_montserrat_24, 0);
-    lv_obj_set_style_text_color(status, lv_color_hex(0xFF0000), 0);
-    lv_obj_align(status, LV_ALIGN_BOTTOM_MID, 0, -10);
-}
 /*
  *   ======================== APP_MAIN =========================
  */
@@ -291,23 +224,23 @@ int last_count = 0;
 lv_display_t *disp = NULL;
 int last_pulse_count = 0;
 
-void update_scr_cb(lv_timer_t *timer)
-{
-    char *buffer = ((monitor % 2)) == 0 ? "ON" : "OFF";
-    if (lvgl_port_lock(100))
-    {
-        lv_label_set_text(status, buffer);
-        lv_obj_set_style_text_color(status,
-                (monitor % 2 == 0 ? lv_color_hex(0xFF0000) : lv_color_hex(0x0000FF)), 0);
+// void update_scr_cb(lv_timer_t *timer)
+// {
+//     char *buffer = ((monitor % 2)) == 0 ? "ON" : "OFF";
+//     if (lvgl_port_lock(100))
+//     {
+//         lv_label_set_text(status, buffer);
+//         lv_obj_set_style_text_color(status,
+//                 (monitor % 2 == 0 ? lv_color_hex(0xFF0000) : lv_color_hex(0x0000FF)), 0);
      
-        if (last_pulse_count != pulse_count) {
-            lv_label_set_text_fmt(elapsed_time, "Pulse Count %d", pulse_count);
-            last_pulse_count = pulse_count;
-        }
-    } else {
-        ESP_LOGI(TAG, "Cound not get the lock");
-    }
-}
+//         if (last_pulse_count != pulse_count) {
+//             lv_label_set_text_fmt(elapsed_time, "Pulse Count %d", pulse_count);
+//             last_pulse_count = pulse_count;
+//         }
+//     } else {
+//         ESP_LOGI(TAG, "Cound not get the lock");
+//     }
+// }
 
 void app_main(void)
 {
@@ -348,6 +281,7 @@ void app_main(void)
 
     ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_config, &bus_handle));
     ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &relay_i2C_cfg, &relays));
+    ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &adc_i2C_cfg, &adc));
 
     ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_buffer, sizeof(relay_buffer), -1));
 
@@ -369,7 +303,7 @@ void app_main(void)
     esp_lcd_panel_handle_t panel = NULL;
     esp_lcd_panel_dev_config_t panel_config = {
         .reset_gpio_num = PIN_RST,
-        .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_RGB,
+        .rgb_ele_order =    LCD_RGB_ELEMENT_ORDER_RGB,
         .bits_per_pixel = 16,
     };
     ESP_ERROR_CHECK(esp_lcd_new_panel_ili9341(io, &panel_config, &panel));
@@ -401,19 +335,20 @@ void app_main(void)
     };
     disp = lvgl_port_add_disp(&disp_cfg);
 
+    ui_init();
+    
+    // vTaskDelay(1000/portTICK_PERIOD_MS);
+    lv_scr_load_anim(ui_Primary, LV_SCR_LOAD_ANIM_OVER_TOP, 2000, 0, true);
 
     char buf[32];
     int tick = 0;
 
-    // esp_lcd_panel_draw_bitmap(panel, 0, 0, (int)router.header.w, (int)router.header.h, &router_map);
-    lvgl_port_lock(0);
-    build_ui();
-    build_splash();
-    lv_scr_load(splash);
-    lvgl_port_unlock();
 
-    // // Create an LVGL timer to wait 3 seconds (3000 ms) before loading the main screen
-    lv_timer_t * refresh_timer = lv_timer_create(update_scr_cb, 30, NULL);
+
+    // lv_timer_t * refresh_timer = lv_timer_create(update_scr_cb, 30, NULL);
+
+ 
+    
 
     while (1)
     {

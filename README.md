@@ -47,3 +47,16 @@ Rev 1
     MQTT logging
     scrape data from fob reader api
 */
+
+Sparkfun qwik (I2C) cables
+    Black = GND 
+    Red = 3.3V 
+    Blue = SDA 
+    Yellow = SCL
+
+Adafruit (STEMMA) I2C
+    Black = GND
+    Red = V+
+    White = SDA
+    Green = SCL
+
