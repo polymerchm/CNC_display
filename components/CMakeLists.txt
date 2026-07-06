@@ -3,6 +3,8 @@ idf_component_register(SRCS
                             "cnc_i2c.c"
                             "cnc_encoder.c"
                             "logo.c"
+                            "formatWithCommas.c"
+                            "ads1115.c"
                        INCLUDE_DIRS 
                             "."
                             "include"

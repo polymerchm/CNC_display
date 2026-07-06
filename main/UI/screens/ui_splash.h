@@ -3,8 +3,8 @@
 // LVGL version: 8.3.11
 // Project name: SquareLine_Project
 
-#ifndef UI_SPLASH_H
-#define UI_SPLASH_H
+#ifndef MAIN_UI_SCREENS_UI_SPLASH
+#define MAIN_UI_SCREENS_UI_SPLASH
 
 #ifdef __cplusplus
 extern "C" {
@@ -21,5 +21,5 @@ extern lv_obj_t *ui_splash;
 } /*extern "C"*/
 #endif
 
-#endif
+#endif  /* MAIN_UI_SCREENS_UI_SPLASH */
 

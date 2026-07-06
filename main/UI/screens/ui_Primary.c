@@ -53,13 +53,13 @@ lv_obj_set_style_text_font(ui_CurrentSpeedLabel, &lv_font_montserrat_22, LV_PART
 ui_CurrentSpeed = lv_label_create(ui_Primary);
 lv_obj_set_width( ui_CurrentSpeed, 180);
 lv_obj_set_height( ui_CurrentSpeed, LV_SIZE_CONTENT);   /// 1
-lv_obj_set_x( ui_CurrentSpeed, 100 );
-lv_obj_set_y( ui_CurrentSpeed, 50 );
-lv_label_set_text(ui_CurrentSpeed,"24000");
+lv_obj_set_x( ui_CurrentSpeed, 120 );
+lv_obj_set_y( ui_CurrentSpeed, 55 );
+lv_label_set_text(ui_CurrentSpeed,"0");
 lv_obj_set_style_text_color(ui_CurrentSpeed, lv_color_hex(0xffffff), LV_PART_MAIN | LV_STATE_DEFAULT );
 lv_obj_set_style_text_opa(ui_CurrentSpeed, 255, LV_PART_MAIN| LV_STATE_DEFAULT);
 lv_obj_set_style_text_align(ui_CurrentSpeed, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN| LV_STATE_DEFAULT);
-lv_obj_set_style_text_font(ui_CurrentSpeed, &lv_font_montserrat_22, LV_PART_MAIN| LV_STATE_DEFAULT);
+lv_obj_set_style_text_font(ui_CurrentSpeed, &lv_font_unscii_16, LV_PART_MAIN| LV_STATE_DEFAULT);
 
 ui_ProgramSpeedLabel = lv_label_create(ui_Primary);
 lv_obj_set_width( ui_ProgramSpeedLabel, 180);
@@ -75,13 +75,13 @@ lv_obj_set_style_text_font(ui_ProgramSpeedLabel, &lv_font_montserrat_22, LV_PART
 ui_ProgramSpeed = lv_label_create(ui_Primary);
 lv_obj_set_width( ui_ProgramSpeed, 180);
 lv_obj_set_height( ui_ProgramSpeed, LV_SIZE_CONTENT);   /// 1
-lv_obj_set_x( ui_ProgramSpeed, 100 );
-lv_obj_set_y( ui_ProgramSpeed, 90 );
-lv_label_set_text(ui_ProgramSpeed,"24000");
+lv_obj_set_x( ui_ProgramSpeed, 120 );
+lv_obj_set_y( ui_ProgramSpeed, 95 );
+lv_label_set_text(ui_ProgramSpeed,"24,000");
 lv_obj_set_style_text_color(ui_ProgramSpeed, lv_color_hex(0xffffff), LV_PART_MAIN | LV_STATE_DEFAULT );
 lv_obj_set_style_text_opa(ui_ProgramSpeed, 255, LV_PART_MAIN| LV_STATE_DEFAULT);
 lv_obj_set_style_text_align(ui_ProgramSpeed, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN| LV_STATE_DEFAULT);
-lv_obj_set_style_text_font(ui_ProgramSpeed, &lv_font_montserrat_22, LV_PART_MAIN| LV_STATE_DEFAULT);
+lv_obj_set_style_text_font(ui_ProgramSpeed, &lv_font_unscii_16, LV_PART_MAIN| LV_STATE_DEFAULT);
 
 ui_FrequencyLabel = lv_label_create(ui_Primary);
 lv_obj_set_width( ui_FrequencyLabel, 180);
@@ -97,13 +97,13 @@ lv_obj_set_style_text_font(ui_FrequencyLabel, &lv_font_montserrat_22, LV_PART_MA
 ui_Frequency = lv_label_create(ui_Primary);
 lv_obj_set_width( ui_Frequency, 180);
 lv_obj_set_height( ui_Frequency, LV_SIZE_CONTENT);   /// 1
-lv_obj_set_x( ui_Frequency, 100 );
-lv_obj_set_y( ui_Frequency, 130 );
-lv_label_set_text(ui_Frequency,"24000");
+lv_obj_set_x( ui_Frequency, 120 );
+lv_obj_set_y( ui_Frequency, 135 );
+lv_label_set_text(ui_Frequency,"8,000");
 lv_obj_set_style_text_color(ui_Frequency, lv_color_hex(0xffffff), LV_PART_MAIN | LV_STATE_DEFAULT );
 lv_obj_set_style_text_opa(ui_Frequency, 255, LV_PART_MAIN| LV_STATE_DEFAULT);
 lv_obj_set_style_text_align(ui_Frequency, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN| LV_STATE_DEFAULT);
-lv_obj_set_style_text_font(ui_Frequency, &lv_font_montserrat_22, LV_PART_MAIN| LV_STATE_DEFAULT);
+lv_obj_set_style_text_font(ui_Frequency, &lv_font_unscii_16, LV_PART_MAIN| LV_STATE_DEFAULT);
 
 ui_Status = lv_label_create(ui_Primary);
 lv_obj_set_width( ui_Status, LV_SIZE_CONTENT);  /// 1

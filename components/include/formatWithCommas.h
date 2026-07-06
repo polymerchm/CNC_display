@@ -1,0 +1,4 @@
+#ifndef COMPONENTS_INCLUDE_FORMATWITHCOMMAS
+#define COMPONENTS_INCLUDE_FORMATWITHCOMMAS
+void format_with_commas(long long num, char *output);
+#endif  /* COMPONENTS_INCLUDE_FORMATWITHCOMMAS */

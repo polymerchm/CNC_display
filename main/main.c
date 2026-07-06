@@ -31,6 +31,7 @@
 #include "spindle.h"
 #include "cnc_encoder.h"
 #include "UI/ui.h"
+#include "formatWithCommas.h"
 
 
 static const char *TAG = "CNC";
@@ -224,23 +225,19 @@ int last_count = 0;
 lv_display_t *disp = NULL;
 int last_pulse_count = 0;
 
-// void update_scr_cb(lv_timer_t *timer)
-// {
-//     char *buffer = ((monitor % 2)) == 0 ? "ON" : "OFF";
-//     if (lvgl_port_lock(100))
-//     {
-//         lv_label_set_text(status, buffer);
-//         lv_obj_set_style_text_color(status,
-//                 (monitor % 2 == 0 ? lv_color_hex(0xFF0000) : lv_color_hex(0x0000FF)), 0);
-     
-//         if (last_pulse_count != pulse_count) {
-//             lv_label_set_text_fmt(elapsed_time, "Pulse Count %d", pulse_count);
-//             last_pulse_count = pulse_count;
-//         }
-//     } else {
-//         ESP_LOGI(TAG, "Cound not get the lock");
-//     }
-// }
+void update_scr_cb(lv_timer_t *timer)
+{
+    int temp;
+    char buff[10];
+    if (lvgl_port_lock(100))
+    {
+        temp = (rand() % (24000 - 23500 + 1)) + 23500;
+        format_with_commas(temp, buff);
+        lv_label_set_text(ui_CurrentSpeed,  buff);
+    } else {
+        ESP_LOGI(TAG, "Cound not get the lock");
+    }
+}
 
 void app_main(void)
 {
@@ -338,14 +335,14 @@ void app_main(void)
     ui_init();
     
     // vTaskDelay(1000/portTICK_PERIOD_MS);
-    lv_scr_load_anim(ui_Primary, LV_SCR_LOAD_ANIM_OVER_TOP, 2000, 0, true);
+    lv_scr_load_anim(ui_Primary, LV_SCR_LOAD_ANIM_OVER_BOTTOM, 2000, 0, true);
 
     char buf[32];
     int tick = 0;
 
 
 
-    // lv_timer_t * refresh_timer = lv_timer_create(update_scr_cb, 30, NULL);
+    lv_timer_t * refresh_timer = lv_timer_create(update_scr_cb, 100, NULL);
 
  
     
