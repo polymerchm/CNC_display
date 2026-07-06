@@ -27,7 +27,6 @@
 #include "lvgl.h"
 
 #include "main.h"
-#include "cnc_i2c.h"
 #include "spindle.h"
 #include "cnc_encoder.h"
 #include "UI/ui.h"

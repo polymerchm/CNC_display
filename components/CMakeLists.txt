@@ -1,10 +1,10 @@
 idf_component_register(SRCS 
                             "spindle.c"
-                            "cnc_i2c.c"
                             "cnc_encoder.c"
                             "logo.c"
                             "formatWithCommas.c"
                             "ads1115.c"
+                            "mcp4725.c"
                        INCLUDE_DIRS 
                             "."
                             "include"
@@ -17,7 +17,5 @@ idf_component_register(SRCS
                             esp_lcd 
                             esp_lcd_ili9341
                             encoder
-                            lvgl
-    
-                           
+                            lvgl     
                   )
