@@ -22,6 +22,9 @@ extern lv_obj_t *ui_ProgramSpeed;
 extern lv_obj_t *ui_FrequencyLabel;
 extern lv_obj_t *ui_Frequency;
 extern lv_obj_t *ui_Status;
+extern lv_obj_t *UI_DeltaLabel;
+extern lv_obj_t *ui_Delta;
+
 // CUSTOM VARIABLES
 
 #ifdef __cplusplus

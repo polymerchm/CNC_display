@@ -15,6 +15,9 @@ lv_obj_t *ui_ProgramSpeed = NULL;
 lv_obj_t *ui_FrequencyLabel = NULL;
 lv_obj_t *ui_Frequency = NULL;
 lv_obj_t *ui_Status = NULL;
+lv_obj_t *ui_DeltaLabel = NULL;
+lv_obj_t *ui_Delta = NULL;
+
 
 // event funtions
 
@@ -108,14 +111,36 @@ lv_obj_set_style_text_font(ui_Frequency, &lv_font_unscii_16, LV_PART_MAIN| LV_ST
 ui_Status = lv_label_create(ui_Primary);
 lv_obj_set_width( ui_Status, LV_SIZE_CONTENT);  /// 1
 lv_obj_set_height( ui_Status, LV_SIZE_CONTENT);   /// 1
-lv_obj_set_x( ui_Status, -6 );
-lv_obj_set_y( ui_Status, -30 );
+lv_obj_set_x( ui_Status, 0 );
+lv_obj_set_y( ui_Status, -35 );
 lv_obj_set_align( ui_Status, LV_ALIGN_BOTTOM_MID );
 lv_label_set_text(ui_Status,"OFF");
 lv_obj_set_style_text_color(ui_Status, lv_color_hex(rgb2rbg(0x00ff00)), LV_PART_MAIN | LV_STATE_DEFAULT );
 lv_obj_set_style_text_opa(ui_Status, 255, LV_PART_MAIN| LV_STATE_DEFAULT);
 lv_obj_set_style_text_font(ui_Status, &lv_font_montserrat_36, LV_PART_MAIN| LV_STATE_DEFAULT);
 
+
+ui_DeltaLabel = lv_label_create(ui_Primary);
+lv_obj_set_width( ui_DeltaLabel, LV_SIZE_CONTENT);  /// 1
+lv_obj_set_height( ui_DeltaLabel, LV_SIZE_CONTENT);   /// 1
+lv_obj_set_x( ui_DeltaLabel, 50 );
+lv_obj_set_y( ui_DeltaLabel, -5 );
+lv_obj_set_align( ui_DeltaLabel, LV_ALIGN_BOTTOM_LEFT );
+lv_label_set_text(ui_DeltaLabel,"Speed Increment: +/- ");
+lv_obj_set_style_text_color(ui_DeltaLabel, lv_color_hex(rgb2rbg(0x00ff00)), LV_PART_MAIN | LV_STATE_DEFAULT );
+lv_obj_set_style_text_opa(ui_DeltaLabel, 255, LV_PART_MAIN| LV_STATE_DEFAULT);
+lv_obj_set_style_text_font(ui_DeltaLabel, &lv_font_montserrat_18, LV_PART_MAIN| LV_STATE_DEFAULT);
+
+ui_Delta = lv_label_create(ui_Primary);
+lv_obj_set_width( ui_Delta, LV_SIZE_CONTENT);  /// 1
+lv_obj_set_height( ui_Delta, LV_SIZE_CONTENT);   /// 1
+lv_obj_set_x( ui_Delta, 250 );
+lv_obj_set_y( ui_Delta, -5 );
+lv_obj_set_align( ui_Delta, LV_ALIGN_BOTTOM_LEFT );
+lv_label_set_text(ui_Delta,"1000");
+lv_obj_set_style_text_color(ui_Delta, lv_color_hex(rgb2rbg(0x00ff00)), LV_PART_MAIN | LV_STATE_DEFAULT );
+lv_obj_set_style_text_opa(ui_Delta, 255, LV_PART_MAIN| LV_STATE_DEFAULT);
+lv_obj_set_style_text_font(ui_Delta, &lv_font_montserrat_18, LV_PART_MAIN| LV_STATE_DEFAULT);
 }
 
 void ui_Primary_screen_destroy(void)
@@ -132,5 +157,8 @@ ui_ProgramSpeed= NULL;
 ui_FrequencyLabel= NULL;
 ui_Frequency= NULL;
 ui_Status= NULL;
+ui_Delta = NULL;
+ui_DeltaLabel = NULL;
+
 
 }

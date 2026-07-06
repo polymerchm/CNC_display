@@ -31,6 +31,8 @@
 #include "cnc_encoder.h"
 #include "UI/ui.h"
 #include "formatWithCommas.h"
+#include "mcp4725.h"
+#include "ads1115.h"
 
 
 static const char *TAG = "CNC";
@@ -142,13 +144,10 @@ static i2c_device_config_t relay_i2C_cfg = {
 
 uint8_t relay_buffer = 0xf0;
 
-/* adc globals */
-static i2c_device_config_t adc_i2C_cfg = {
-    // adc board
-    .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-    .device_address = ADC_ADDR,
-    .scl_speed_hz = 100000, // 100kHz
-};
+/* ADC globals handled by ads1115_t structure **/
+static ads1115_t ads1115_handle; 
+
+
 
 /* dac globals */
 static i2c_device_config_t dac_i2C_cfg = {
@@ -158,10 +157,10 @@ static i2c_device_config_t dac_i2C_cfg = {
     .scl_speed_hz = 100000, // 400kHz
 };
 
-// static i2c_dev_t pcf8574;
+
 static i2c_master_dev_handle_t dac;
 static i2c_master_dev_handle_t relays;
-static i2c_master_dev_handle_t adc;
+
 
 /* pcnt */
 
@@ -274,10 +273,15 @@ void app_main(void)
     ESP_ERROR_CHECK(pcnt_unit_start(pcnt_unit));
 
     // // init_spindle_change();
+    static ads1115_t ads1115_handle;
+
 
     ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_config, &bus_handle));
     ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &relay_i2C_cfg, &relays));
-    ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &adc_i2C_cfg, &adc));
+    ESP_ERROR_CHECK(ads1115_init(&ads1115_handle, &bus_handle, ADC_ADDR, 100000));
+    // ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &adc_i2C_cfg, &adc));
+    ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &dac_i2C_cfg, &dac));
+
 
     ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_buffer, sizeof(relay_buffer), -1));
 
@@ -343,8 +347,10 @@ void app_main(void)
 
     lv_timer_t * refresh_timer = lv_timer_create(update_scr_cb, 100, NULL);
 
- 
+    ads1115_set_gain(&ads1115_handle, ADS_FSR_6_144V);
+    ads1115_set_sps(&ads1115_handle, ADS_SPS_128);
     
+
 
     while (1)
     {
@@ -363,7 +369,19 @@ void app_main(void)
             }
         }
         monitor++;
-        
+        uint16_t raw;
+        float voltage;
+        for (int i = 0; i < 0xfff; i+= 8) {
+            mcp4725_set_voltage(dac, i);
+            raw = ads1115_differential_0_1(&ads1115_handle);
+            voltage = ads1115_raw_to_voltage(&ads1115_handle, raw);
+            ESP_LOGI(TAG,"i %d, raw %d  voltage is %f", i, raw, voltage );
+
+
+            
+            vTaskDelay(250/portTICK_PERIOD_MS);
+        }
+
 
         // relay_buffer = 0x10;
         // relay_buffer = ~relay_buffer;
