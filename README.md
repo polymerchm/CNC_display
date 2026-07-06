@@ -60,3 +60,6 @@ Adafruit (STEMMA) I2C
     White = SDA
     Green = SCL
 
+NOTE:
+
+LVGL expects color in RBG order, NOT RGB.   helper function rgb2rbg etc fizx that.

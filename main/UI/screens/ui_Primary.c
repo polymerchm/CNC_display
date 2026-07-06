@@ -4,6 +4,7 @@
 // Project name: SquareLine_Project
 
 #include "../ui.h"
+#include "../../main/colorShifters.h"
 
 lv_obj_t *ui_Primary = NULL;
 lv_obj_t *ui_Title = NULL;
@@ -33,7 +34,7 @@ lv_obj_set_x( ui_Title, 0 );
 lv_obj_set_y( ui_Title, -99 );
 lv_obj_set_align( ui_Title, LV_ALIGN_CENTER );
 lv_label_set_text(ui_Title,"TechnoCNC Router Control");
-lv_obj_set_style_text_color(ui_Title, lv_color_hex(0xFFC83D), LV_PART_MAIN | LV_STATE_DEFAULT );
+lv_obj_set_style_text_color(ui_Title, lv_color_hex(rgb2rbg(0xffff00)), LV_PART_MAIN | LV_STATE_DEFAULT ); // 0xFFC83D
 lv_obj_set_style_text_opa(ui_Title, 255, LV_PART_MAIN| LV_STATE_DEFAULT);
 lv_obj_set_style_text_font(ui_Title, &lv_font_montserrat_22, LV_PART_MAIN| LV_STATE_DEFAULT);
 
@@ -43,7 +44,8 @@ lv_obj_set_height( ui_CurrentSpeedLabel, LV_SIZE_CONTENT);   /// 1
 lv_obj_set_x( ui_CurrentSpeedLabel, 15 );
 lv_obj_set_y( ui_CurrentSpeedLabel, 50 );
 lv_label_set_text(ui_CurrentSpeedLabel,"Current Speed:");
-lv_obj_set_style_text_color(ui_CurrentSpeedLabel, lv_color_hex(0xffffff), LV_PART_MAIN | LV_STATE_DEFAULT );
+// lv_obj_set_style_text_color(ui_CurrentSpeedLabel, lv_color_hex(0xffffff), LV_PART_MAIN | LV_STATE_DEFAULT );
+lv_obj_set_style_text_color(ui_CurrentSpeedLabel, lv_color_hex(rgb2rbg(0x00faff)), LV_PART_MAIN | LV_STATE_DEFAULT );
 lv_obj_set_style_text_opa(ui_CurrentSpeedLabel, 255, LV_PART_MAIN| LV_STATE_DEFAULT);
 lv_obj_set_style_text_align(ui_CurrentSpeedLabel, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN| LV_STATE_DEFAULT);
 lv_obj_set_style_text_font(ui_CurrentSpeedLabel, &lv_font_montserrat_22, LV_PART_MAIN| LV_STATE_DEFAULT);
@@ -65,7 +67,7 @@ lv_obj_set_height( ui_ProgramSpeedLabel, LV_SIZE_CONTENT);   /// 1
 lv_obj_set_x( ui_ProgramSpeedLabel, 15 );
 lv_obj_set_y( ui_ProgramSpeedLabel, 90 );
 lv_label_set_text(ui_ProgramSpeedLabel,"Program Speed:");
-lv_obj_set_style_text_color(ui_ProgramSpeedLabel, lv_color_hex(0xffffff), LV_PART_MAIN | LV_STATE_DEFAULT );
+lv_obj_set_style_text_color(ui_ProgramSpeedLabel, lv_color_hex(rgb2rbg(0x00faff)), LV_PART_MAIN | LV_STATE_DEFAULT );
 lv_obj_set_style_text_opa(ui_ProgramSpeedLabel, 255, LV_PART_MAIN| LV_STATE_DEFAULT);
 lv_obj_set_style_text_align(ui_ProgramSpeedLabel, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN| LV_STATE_DEFAULT);
 lv_obj_set_style_text_font(ui_ProgramSpeedLabel, &lv_font_montserrat_22, LV_PART_MAIN| LV_STATE_DEFAULT);
@@ -87,7 +89,7 @@ lv_obj_set_height( ui_FrequencyLabel, LV_SIZE_CONTENT);   /// 1
 lv_obj_set_x( ui_FrequencyLabel, 15 );
 lv_obj_set_y( ui_FrequencyLabel, 130 );
 lv_label_set_text(ui_FrequencyLabel,"Frequency:");
-lv_obj_set_style_text_color(ui_FrequencyLabel, lv_color_hex(0xffffff), LV_PART_MAIN | LV_STATE_DEFAULT );
+lv_obj_set_style_text_color(ui_FrequencyLabel, lv_color_hex(rgb2rbg(0x00faff)), LV_PART_MAIN | LV_STATE_DEFAULT );
 lv_obj_set_style_text_opa(ui_FrequencyLabel, 255, LV_PART_MAIN| LV_STATE_DEFAULT);
 lv_obj_set_style_text_align(ui_FrequencyLabel, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN| LV_STATE_DEFAULT);
 lv_obj_set_style_text_font(ui_FrequencyLabel, &lv_font_montserrat_22, LV_PART_MAIN| LV_STATE_DEFAULT);
@@ -110,7 +112,7 @@ lv_obj_set_x( ui_Status, -6 );
 lv_obj_set_y( ui_Status, -30 );
 lv_obj_set_align( ui_Status, LV_ALIGN_BOTTOM_MID );
 lv_label_set_text(ui_Status,"OFF");
-lv_obj_set_style_text_color(ui_Status, lv_color_hex(0x0000ff), LV_PART_MAIN | LV_STATE_DEFAULT );
+lv_obj_set_style_text_color(ui_Status, lv_color_hex(rgb2rbg(0x00ff00)), LV_PART_MAIN | LV_STATE_DEFAULT );
 lv_obj_set_style_text_opa(ui_Status, 255, LV_PART_MAIN| LV_STATE_DEFAULT);
 lv_obj_set_style_text_font(ui_Status, &lv_font_montserrat_36, LV_PART_MAIN| LV_STATE_DEFAULT);
 

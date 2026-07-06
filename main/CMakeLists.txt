@@ -1,5 +1,6 @@
 idf_component_register(SRCS  
-                    "main.c" 
+                    "main.c"     
+                    "colorShifters.c"
                     "UI/ui.c" 
                     "UI/ui_helpers.c"
                     "UI/screens/ui_Primary.c"

@@ -3,8 +3,8 @@
 // LVGL version: 8.3.11
 // Project name: SquareLine_Project
 
-#ifndef UI_PRIMARY_H
-#define UI_PRIMARY_H
+#ifndef MAIN_UI_SCREENS_UI_PRIMARY
+#define MAIN_UI_SCREENS_UI_PRIMARY
 
 #ifdef __cplusplus
 extern "C" {
@@ -28,5 +28,5 @@ extern lv_obj_t *ui_Status;
 } /*extern "C"*/
 #endif
 
-#endif
+#endif  /* MAIN_UI_SCREENS_UI_PRIMARY */
 
