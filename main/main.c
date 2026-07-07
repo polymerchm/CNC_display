@@ -142,12 +142,8 @@ static i2c_device_config_t relay_i2C_cfg = {
     .scl_speed_hz = 100000, // 100kHz
 };
 
-uint8_t relay_buffer = 0xf0;
-
 /* ADC globals handled by ads1115_t structure **/
 static ads1115_t ads1115_handle; 
-
-
 
 /* dac globals */
 static i2c_device_config_t dac_i2C_cfg = {
@@ -224,9 +220,6 @@ void re_task(void *arg)
 }
 
 
-/*==========================================================*/
-/*====================== functions  ========================*/
-/*==========================================================*/
 
 
 
@@ -234,10 +227,10 @@ void re_task(void *arg)
  *   ======================== APP_MAIN =========================
  */
 
-int monitor = 0;
+
 int last_count = 0;
 lv_display_t *disp = NULL;
-// int last_pulse_count = 0;
+
 
 void update_scr_cb(lv_timer_t *timer)
 {
@@ -259,14 +252,18 @@ void app_main(void)
 
     static ads1115_t ads1115_handle;
 
+    /********************************* i2c master *****************************/
 
     ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_config, &bus_handle));
+    // initalize relay board
     ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &relay_i2C_cfg, &relays));
+    // ininitailize ADC - calls i2c_master_bus_add_device internally
     ESP_ERROR_CHECK(ads1115_init(&ads1115_handle, &bus_handle, ADC_ADDR, 100000));
-    // ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &adc_i2C_cfg, &adc));
+    // initialize DAC board 
     ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &dac_i2C_cfg, &dac));
 
-
+    // pull all relays to open (active low)
+    uint8_t relay_buffer = 0xf0;
     ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_buffer, sizeof(relay_buffer), -1));
 
     /**************************** LCD ************************ */
