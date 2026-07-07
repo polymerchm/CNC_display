@@ -32,6 +32,9 @@
 #include "formatWithCommas.h"
 #include "mcp4725.h"
 #include "ads1115.h"
+#include "iot_button.h"
+#include "button_gpio.h"
+#include "colorShifters.h"
 
 
 static const char *TAG = "CNC";
@@ -76,7 +79,6 @@ ROTARY ENCODER
 /*====================== globals ===========================*/
 /*==========================================================*/
 
-// int spindle_sense_pin  = GPIO_NUM_32;
 // #define DEBOUNCE_TIME_US  50000 // 50 milliseconds
 double total_spindle_time; // total of all spindle on time since startup
 double time_at_turn_on;    //   time for last segment
@@ -219,8 +221,23 @@ void re_task(void *arg)
     }
 }
 
+/************ external relay closures *****************/
 
+#define BUTTON_IO_NUM GPIO_NUM_32
+#define BUTTON_ACTIVE_LEVEL 0
 
+bool spindle_relay_state = false; // open
+
+static void spindle_relay_close_event(void *arg, void*data) {
+    ESP_LOGI(TAG,"relay closed");
+    spindle_relay_state = true;
+}
+
+static void spindle_relay_open_event(void *arg, void*data) {
+    ESP_LOGI(TAG,"relay opened");
+    spindle_relay_state = false;
+
+}
 
 
 /*
@@ -231,16 +248,57 @@ void re_task(void *arg)
 int last_count = 0;
 lv_display_t *disp = NULL;
 
+/*
+    signal from VFD proportional to the current speed
+    input in range 0-3v
+    voltage2Speed 0v = RPM_MIN rpm, VMAX = RPM_MAX rpm
+*/
+float input_FM1;
+float voltage2speed;
+#define RPM_MIN 4000
+#define RPM_MAX 24000
+#define FM1_MIN 0.0
+#define FM1_MAX 3.0
 
+/* signal to the VFD for programming */
+float output_XXX;
+
+
+int blink_counter = 0;
 void update_scr_cb(lv_timer_t *timer)
 {
     int temp;
     char buff[10];
+    lv_color_t red = lv_color_hex(rgb2rbg( 0xff0000));
+    lv_color_t green = lv_color_hex(rgb2rbg( 0x00ff00));
+    if (blink_counter == 5)
+    {
+        blink_counter = 0;
+        if (lv_obj_has_flag(ui_Status, LV_OBJ_FLAG_HIDDEN))
+        {
+            lv_obj_clear_flag(ui_Status, LV_OBJ_FLAG_HIDDEN);
+        }
+        else if (spindle_relay_state)
+        {
+            lv_obj_add_flag(ui_Status, LV_OBJ_FLAG_HIDDEN);
+        }
+    } else {
+        blink_counter++;
+    }
+    lv_color_t status_color = (spindle_relay_state ? red : green);
+
+    
     if (lvgl_port_lock(100))
     {
+        /** CURRENT SPEED UPDATE */
         temp = (rand() % (24000 - 23500 + 1)) + 23500;
         format_with_commas(temp, buff);
         lv_label_set_text(ui_CurrentSpeed,  buff);
+        /** STATUS  UPDATE */
+        lv_label_set_text(ui_Status,spindle_relay_state ? "ON" : "OFF");
+        lv_obj_set_style_text_color(ui_Status, status_color ,
+            LV_PART_MAIN | LV_STATE_DEFAULT );
+    //    lvgl_port_unlock();     /* does not like the unlock here????            
     } else {
         ESP_LOGI(TAG, "Cound not get the lock");
     }
@@ -323,8 +381,29 @@ void app_main(void)
     int tick = 0;
     int last_pulse = 0;
 
+    /************** external relay******************* */
 
+    const button_config_t spindle_relay_cfg = {
+        .long_press_time = 500, // in ms
+        .short_press_time = 200
+    };
+    
+    const button_gpio_config_t spindle_relay_gpio_cfg = {
+        .gpio_num = BUTTON_IO_NUM,
+        .active_level = BUTTON_ACTIVE_LEVEL,
+        .disable_pull = false,
+    };
 
+    button_handle_t spindle_relay;
+
+    // Button handle
+
+    esp_err_t ret = iot_button_new_gpio_device(&spindle_relay_cfg, &spindle_relay_gpio_cfg, &spindle_relay);
+
+    ret = iot_button_register_cb(spindle_relay, BUTTON_PRESS_DOWN, NULL, spindle_relay_close_event, NULL);
+    ESP_ERROR_CHECK(ret);
+    ret = iot_button_register_cb(spindle_relay, BUTTON_PRESS_END, NULL, spindle_relay_open_event, NULL);
+    ESP_ERROR_CHECK(ret);
 
     lv_timer_t * refresh_timer = lv_timer_create(update_scr_cb, 100, NULL);
 
