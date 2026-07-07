@@ -249,8 +249,7 @@ void update_scr_cb(lv_timer_t *timer)
 void app_main(void)
 {
 
-
-    static ads1115_t ads1115_handle;
+    
 
     /********************************* i2c master *****************************/
 
@@ -317,8 +316,7 @@ void app_main(void)
     disp = lvgl_port_add_disp(&disp_cfg);
 
     ui_init();
-    
-    // vTaskDelay(1000/portTICK_PERIOD_MS);
+
     lv_scr_load_anim(ui_Primary, LV_SCR_LOAD_ANIM_OVER_BOTTOM, 2000, 0, true);
 
     char buf[32];
@@ -330,7 +328,7 @@ void app_main(void)
 
     lv_timer_t * refresh_timer = lv_timer_create(update_scr_cb, 100, NULL);
 
-    ads1115_set_gain(&ads1115_handle, ADS_FSR_6_144V);
+    ads1115_set_gain(&ads1115_handle, ADS_FSR_4_096V); // +/- 4.096 FS
     ads1115_set_sps(&ads1115_handle, ADS_SPS_128);
     
     xTaskCreate(re_task, TAG, configMINIMAL_STACK_SIZE * 8, NULL, 5, NULL);
@@ -339,7 +337,6 @@ void app_main(void)
     {
         lv_task_handler();
         
-        monitor++;
         uint16_t raw;
         float voltage;
         

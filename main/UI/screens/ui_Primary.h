@@ -21,6 +21,8 @@ extern lv_obj_t *ui_ProgramSpeedLabel;
 extern lv_obj_t *ui_ProgramSpeed;
 extern lv_obj_t *ui_FrequencyLabel;
 extern lv_obj_t *ui_Frequency;
+extern lv_obj_t *ui_ElapsedLabel;
+extern lv_obj_t *ui_Elapsed;
 extern lv_obj_t *ui_Status;
 extern lv_obj_t *UI_DeltaLabel;
 extern lv_obj_t *ui_Delta;

@@ -3,15 +3,15 @@ Bodgery CNC-Router Heads-Up Display
 
 Rev 0:
     reads FM1 via an I2C ADC - a voltage proportional to the spindle frequency/speed
-        ADC Model: Gravity: 0-10V 15-Bit Dual-Channel High-Precision ADC Module (using ADS1115)
+        ADC Model: Sparkfun ADS 1115
 
     send a voltage between 0 and 10V to program the VFD
-        DAC Model: Gravity 0-10 V 16 bit DAC 
+        DAC Model: Sparkfun MCP4725 
 
-    using a rotory encoder to change the desired spindle speed (  programs the to the DAC)
+    using a rotory encoder to change the desired spindle speed ( programs the to the DAC)
     
     monitors the T1 line for spindle turn on
-        GPIO line 403 pulled up, looking for active low (toggles on any change)
+        GPIO line xxx pulled up, looking for active low (toggles on any change)
         ISR is debounced
     accumulates the spindle time since bootup
         task running in background when spindle is on.
@@ -62,4 +62,4 @@ Adafruit (STEMMA) I2C
 
 NOTE:
 
-LVGL expects color in RBG order, NOT RGB.   helper function rgb2rbg etc fizx that.
+LVGL (using version 8.4 for SwquareLine Studio compatibility) expects color in RBG order, NOT RGB.   helper function rgb2rbg etc fixes that.

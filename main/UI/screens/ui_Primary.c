@@ -14,6 +14,8 @@ lv_obj_t *ui_ProgramSpeedLabel = NULL;
 lv_obj_t *ui_ProgramSpeed = NULL;
 lv_obj_t *ui_FrequencyLabel = NULL;
 lv_obj_t *ui_Frequency = NULL;
+lv_obj_t *ui_ElapsedLabel = NULL;
+lv_obj_t *ui_Elapsed = NULL;
 lv_obj_t *ui_Status = NULL;
 lv_obj_t *ui_DeltaLabel = NULL;
 lv_obj_t *ui_Delta = NULL;
@@ -68,7 +70,7 @@ ui_ProgramSpeedLabel = lv_label_create(ui_Primary);
 lv_obj_set_width( ui_ProgramSpeedLabel, 180);
 lv_obj_set_height( ui_ProgramSpeedLabel, LV_SIZE_CONTENT);   /// 1
 lv_obj_set_x( ui_ProgramSpeedLabel, 15 );
-lv_obj_set_y( ui_ProgramSpeedLabel, 90 );
+lv_obj_set_y( ui_ProgramSpeedLabel, 80 );
 lv_label_set_text(ui_ProgramSpeedLabel,"Program Speed:");
 lv_obj_set_style_text_color(ui_ProgramSpeedLabel, lv_color_hex(rgb2rbg(0x00faff)), LV_PART_MAIN | LV_STATE_DEFAULT );
 lv_obj_set_style_text_opa(ui_ProgramSpeedLabel, 255, LV_PART_MAIN| LV_STATE_DEFAULT);
@@ -79,7 +81,7 @@ ui_ProgramSpeed = lv_label_create(ui_Primary);
 lv_obj_set_width( ui_ProgramSpeed, 180);
 lv_obj_set_height( ui_ProgramSpeed, LV_SIZE_CONTENT);   /// 1
 lv_obj_set_x( ui_ProgramSpeed, 120 );
-lv_obj_set_y( ui_ProgramSpeed, 95 );
+lv_obj_set_y( ui_ProgramSpeed, 85 );
 lv_label_set_text(ui_ProgramSpeed,"24,000");
 lv_obj_set_style_text_color(ui_ProgramSpeed, lv_color_hex(0xffffff), LV_PART_MAIN | LV_STATE_DEFAULT );
 lv_obj_set_style_text_opa(ui_ProgramSpeed, 255, LV_PART_MAIN| LV_STATE_DEFAULT);
@@ -90,7 +92,7 @@ ui_FrequencyLabel = lv_label_create(ui_Primary);
 lv_obj_set_width( ui_FrequencyLabel, 180);
 lv_obj_set_height( ui_FrequencyLabel, LV_SIZE_CONTENT);   /// 1
 lv_obj_set_x( ui_FrequencyLabel, 15 );
-lv_obj_set_y( ui_FrequencyLabel, 130 );
+lv_obj_set_y( ui_FrequencyLabel, 110 );
 lv_label_set_text(ui_FrequencyLabel,"Frequency:");
 lv_obj_set_style_text_color(ui_FrequencyLabel, lv_color_hex(rgb2rbg(0x00faff)), LV_PART_MAIN | LV_STATE_DEFAULT );
 lv_obj_set_style_text_opa(ui_FrequencyLabel, 255, LV_PART_MAIN| LV_STATE_DEFAULT);
@@ -101,12 +103,34 @@ ui_Frequency = lv_label_create(ui_Primary);
 lv_obj_set_width( ui_Frequency, 180);
 lv_obj_set_height( ui_Frequency, LV_SIZE_CONTENT);   /// 1
 lv_obj_set_x( ui_Frequency, 120 );
-lv_obj_set_y( ui_Frequency, 135 );
+lv_obj_set_y( ui_Frequency, 115 );
 lv_label_set_text(ui_Frequency,"8,000");
 lv_obj_set_style_text_color(ui_Frequency, lv_color_hex(0xffffff), LV_PART_MAIN | LV_STATE_DEFAULT );
 lv_obj_set_style_text_opa(ui_Frequency, 255, LV_PART_MAIN| LV_STATE_DEFAULT);
 lv_obj_set_style_text_align(ui_Frequency, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN| LV_STATE_DEFAULT);
 lv_obj_set_style_text_font(ui_Frequency, &lv_font_unscii_16, LV_PART_MAIN| LV_STATE_DEFAULT);
+
+ui_ElapsedLabel = lv_label_create(ui_Primary);
+lv_obj_set_width( ui_ElapsedLabel, 180);
+lv_obj_set_height( ui_ElapsedLabel, LV_SIZE_CONTENT);   /// 1
+lv_obj_set_x( ui_ElapsedLabel, 15 );
+lv_obj_set_y( ui_ElapsedLabel, 140 );
+lv_label_set_text(ui_ElapsedLabel,"Elaspsed Time:");
+lv_obj_set_style_text_color(ui_ElapsedLabel, lv_color_hex(rgb2rbg(0x00faff)), LV_PART_MAIN | LV_STATE_DEFAULT );
+lv_obj_set_style_text_opa(ui_ElapsedLabel, 255, LV_PART_MAIN| LV_STATE_DEFAULT);
+lv_obj_set_style_text_align(ui_ElapsedLabel, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN| LV_STATE_DEFAULT);
+lv_obj_set_style_text_font(ui_ElapsedLabel, &lv_font_montserrat_22, LV_PART_MAIN| LV_STATE_DEFAULT);
+
+ui_Elapsed = lv_label_create(ui_Primary);
+lv_obj_set_width( ui_Elapsed, 180);
+lv_obj_set_height( ui_Elapsed, LV_SIZE_CONTENT);   /// 1
+lv_obj_set_x( ui_Elapsed, 120 );
+lv_obj_set_y( ui_Elapsed, 145 );
+lv_label_set_text(ui_Elapsed,"0:35");
+lv_obj_set_style_text_color(ui_Elapsed, lv_color_hex(0xffffff), LV_PART_MAIN | LV_STATE_DEFAULT );
+lv_obj_set_style_text_opa(ui_Elapsed, 255, LV_PART_MAIN| LV_STATE_DEFAULT);
+lv_obj_set_style_text_align(ui_Elapsed, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN| LV_STATE_DEFAULT);
+lv_obj_set_style_text_font(ui_Elapsed, &lv_font_unscii_16, LV_PART_MAIN| LV_STATE_DEFAULT);
 
 ui_Status = lv_label_create(ui_Primary);
 lv_obj_set_width( ui_Status, LV_SIZE_CONTENT);  /// 1
@@ -156,6 +180,8 @@ ui_ProgramSpeedLabel= NULL;
 ui_ProgramSpeed= NULL;
 ui_FrequencyLabel= NULL;
 ui_Frequency= NULL;
+ui_ElapsedLabel = NULL;
+ui_Elapsed = NULL;
 ui_Status= NULL;
 ui_Delta = NULL;
 ui_DeltaLabel = NULL;
