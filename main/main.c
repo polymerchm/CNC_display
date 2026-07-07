@@ -28,7 +28,6 @@
 
 #include "main.h"
 #include "spindle.h"
-#include "cnc_encoder.h"
 #include "UI/ui.h"
 #include "formatWithCommas.h"
 #include "mcp4725.h"
@@ -89,6 +88,7 @@ bool spindle_on = false;
 
 #define re_channel_a GPIO_NUM_25
 #define re_channel_b GPIO_NUM_26
+#define re_btn GPIO_NUM_2
 
 int pulse_count = 0;
 int event_count = 0;
@@ -157,61 +157,77 @@ static i2c_device_config_t dac_i2C_cfg = {
     .scl_speed_hz = 100000, // 400kHz
 };
 
-
 static i2c_master_dev_handle_t dac;
 static i2c_master_dev_handle_t relays;
 
+// esp-idf-encoder
 
-/* pcnt */
+static QueueHandle_t re_event_queue;
+static rotary_encoder_handle_t re;
 
-/*
-****************************************************
-*
-*      CHANNELS MUST BE REVERSED FOR QUADRATURE DETECTION
-*
-***************************************************
-*/
+static void encoder_event_handler(const rotary_encoder_event_t *event, void *ctx)
+{
+    QueueHandle_t queue = (QueueHandle_t)ctx;
+    xQueueSendToBack(queue, event, 0);
+}
 
-static pcnt_unit_config_t unit_config = {
-    .high_limit = 100,
-    .low_limit = -100,
-};
-static pcnt_unit_handle_t pcnt_unit = NULL;
+#define RE_EV_QUEUE 5
 
-static pcnt_chan_config_t chan_a_config = {
-    .edge_gpio_num = re_channel_a,
-    .level_gpio_num = re_channel_b,
-};
-static pcnt_channel_handle_t pcnt_chan_a = NULL;
+void re_task(void *arg)
+{
+    // Create queue for rotary encoder events
+    re_event_queue = xQueueCreate(RE_EV_QUEUE, sizeof(rotary_encoder_event_t));
 
-static pcnt_chan_config_t chan_b_config = {
-    .edge_gpio_num = re_channel_b,
-    .level_gpio_num = re_channel_a,
-};
-static pcnt_channel_handle_t pcnt_chan_b = NULL;
+    // Create an encoder
+    rotary_encoder_config_t config = ROTARY_ENCODER_DEFAULT_CONFIG();
+    config.pin_a = re_channel_a;
+    config.pin_b = re_channel_b;
+    config.pin_btn = re_btn;
+    config.callback = encoder_event_handler;
+    config.callback_ctx = re_event_queue;
+    ESP_ERROR_CHECK(rotary_encoder_create(&config, &re));
 
-pcnt_glitch_filter_config_t filter_config = {
-    .max_glitch_ns = 1000,
-};
+    rotary_encoder_event_t e;
+    int32_t val = 0;
 
-static int watch_points[] = {-10, 0, 10};
+    ESP_LOGI(TAG, "Initial value: %" PRIi32, val);
+    while (1)
+    {
+        xQueueReceive(re_event_queue, &e, portMAX_DELAY);
+
+        switch (e.type)
+        {
+            case RE_ET_BTN_PRESSED:
+                ESP_LOGI(TAG, "Button pressed");
+                break;
+            case RE_ET_BTN_RELEASED:
+                ESP_LOGI(TAG, "Button released");
+                break;
+            case RE_ET_BTN_CLICKED:
+                ESP_LOGI(TAG, "Button clicked");
+                rotary_encoder_enable_acceleration(re, 100);
+                ESP_LOGI(TAG, "Acceleration enabled");
+                break;
+            case RE_ET_BTN_LONG_PRESSED:
+                ESP_LOGI(TAG, "Looooong pressed button");
+                rotary_encoder_disable_acceleration(re);
+                ESP_LOGI(TAG, "Acceleration disabled");
+                break;
+            case RE_ET_CHANGED:
+                val += e.diff;
+                ESP_LOGI(TAG, "Value = %" PRIi32, val);
+                break;
+            default:
+                break;
+        }
+    }
+}
+
+
 /*==========================================================*/
 /*====================== functions  ========================*/
 /*==========================================================*/
 
-/**************** encoder *******************/
-
-/* callback on watch counts */
-static bool pcnt_on_reach(pcnt_unit_handle_t unit, const pcnt_watch_event_data_t *edata, void *user_ctx)
-{
-    BaseType_t high_task_wakeup;
-    QueueHandle_t queue = (QueueHandle_t)user_ctx;
-    // send event data to queue, from this interrupt callback
-    xQueueSendFromISR(queue, &(edata->watch_point_value), &high_task_wakeup);
-    return (high_task_wakeup == pdTRUE);
-}
-
-/* UI */
 
 
 /*
@@ -221,7 +237,7 @@ static bool pcnt_on_reach(pcnt_unit_handle_t unit, const pcnt_watch_event_data_t
 int monitor = 0;
 int last_count = 0;
 lv_display_t *disp = NULL;
-int last_pulse_count = 0;
+// int last_pulse_count = 0;
 
 void update_scr_cb(lv_timer_t *timer)
 {
@@ -240,39 +256,7 @@ void update_scr_cb(lv_timer_t *timer)
 void app_main(void)
 {
 
-    /* inintialize the pcnt for the encoder */
-    ESP_LOGI(TAG, "install pcnt unit");
-    ESP_ERROR_CHECK(pcnt_new_unit(&unit_config, &pcnt_unit));
-    ESP_LOGI(TAG, "set glitch filter");
-    ESP_ERROR_CHECK(pcnt_unit_set_glitch_filter(pcnt_unit, &filter_config));
-    ESP_LOGI(TAG, "install pcnt channels");
-    ESP_ERROR_CHECK(pcnt_new_channel(pcnt_unit, &chan_a_config, &pcnt_chan_a));
-    ESP_ERROR_CHECK(pcnt_new_channel(pcnt_unit, &chan_b_config, &pcnt_chan_b));
-    ESP_LOGI(TAG, "set edge and level actions for pcnt channels");
-    ESP_ERROR_CHECK(pcnt_channel_set_edge_action(pcnt_chan_a, PCNT_CHANNEL_EDGE_ACTION_DECREASE, PCNT_CHANNEL_EDGE_ACTION_INCREASE));
-    ESP_ERROR_CHECK(pcnt_channel_set_level_action(pcnt_chan_a, PCNT_CHANNEL_LEVEL_ACTION_KEEP, PCNT_CHANNEL_LEVEL_ACTION_INVERSE));
-    ESP_ERROR_CHECK(pcnt_channel_set_edge_action(pcnt_chan_b, PCNT_CHANNEL_EDGE_ACTION_INCREASE, PCNT_CHANNEL_EDGE_ACTION_DECREASE));
-    ESP_ERROR_CHECK(pcnt_channel_set_level_action(pcnt_chan_b, PCNT_CHANNEL_LEVEL_ACTION_KEEP, PCNT_CHANNEL_LEVEL_ACTION_INVERSE));
 
-    ESP_LOGI(TAG, "add watch points and register callbacks");
-
-    for (size_t i = 0; i < sizeof(watch_points) / sizeof(watch_points[0]); i++)
-    {
-        ESP_ERROR_CHECK(pcnt_unit_add_watch_point(pcnt_unit, watch_points[i]));
-    }
-    pcnt_event_callbacks_t cbs = {
-        .on_reach = pcnt_on_reach,
-    };
-    QueueHandle_t queue = xQueueCreate(10, sizeof(int));
-    ESP_ERROR_CHECK(pcnt_unit_register_event_callbacks(pcnt_unit, &cbs, queue));
-    ESP_LOGI(TAG, "enable pcnt unit");
-    ESP_ERROR_CHECK(pcnt_unit_enable(pcnt_unit));
-    ESP_LOGI(TAG, "clear pcnt unit");
-    ESP_ERROR_CHECK(pcnt_unit_clear_count(pcnt_unit));
-    ESP_LOGI(TAG, "start pcnt unit");
-    ESP_ERROR_CHECK(pcnt_unit_start(pcnt_unit));
-
-    // // init_spindle_change();
     static ads1115_t ads1115_handle;
 
 
@@ -342,6 +326,8 @@ void app_main(void)
 
     char buf[32];
     int tick = 0;
+    int last_pulse = 0;
+
 
 
 
@@ -350,54 +336,16 @@ void app_main(void)
     ads1115_set_gain(&ads1115_handle, ADS_FSR_6_144V);
     ads1115_set_sps(&ads1115_handle, ADS_SPS_128);
     
-
+    xTaskCreate(re_task, TAG, configMINIMAL_STACK_SIZE * 8, NULL, 5, NULL);
 
     while (1)
     {
         lv_task_handler();
-        if (xQueueReceive(queue, &event_count, pdMS_TO_TICKS(1000)))
-        {
-            ESP_LOGI(TAG, "Watch point event, count: %d", event_count);
-        }
-        else
-        {
-            ESP_ERROR_CHECK(pcnt_unit_get_count(pcnt_unit, &pulse_count));
-            if (pulse_count != last_count)
-            {
-                ESP_LOGI(TAG, "Pulse count: %d", pulse_count);
-                last_count = pulse_count;
-            }
-        }
+        
         monitor++;
         uint16_t raw;
         float voltage;
-        for (int i = 0; i < 0xfff; i+= 8) {
-            mcp4725_set_voltage(dac, i);
-            raw = ads1115_differential_0_1(&ads1115_handle);
-            voltage = ads1115_raw_to_voltage(&ads1115_handle, raw);
-            ESP_LOGI(TAG,"i %d, raw %d  voltage is %f", i, raw, voltage );
-
-
-            
-            vTaskDelay(250/portTICK_PERIOD_MS);
-        }
-
-
-        // relay_buffer = 0x10;
-        // relay_buffer = ~relay_buffer;
-        // ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_buffer, 1, -1));
-        // vTaskDelay(1000/portTICK_PERIOD_MS);
-        // relay_buffer = 0x20;
-        // relay_buffer = ~relay_buffer;
-        // ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_buffer, 1, -1));
-        // vTaskDelay(1000/portTICK_PERIOD_MS);
-        // relay_buffer = 0x40;
-        // relay_buffer = ~relay_buffer;
-        // ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_buffer, 1, -1));
-        // vTaskDelay(1000/portTICK_PERIOD_MS);
-        // relay_buffer = 0x80;
-        // relay_buffer = ~relay_buffer;
-        // ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_buffer, 1, -1));
+        
         vTaskDelay(pdMS_TO_TICKS(100));
     }
     // // // initialize the I2C bus
