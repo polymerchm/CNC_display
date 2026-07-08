@@ -115,7 +115,7 @@ lv_obj_set_width( ui_ElapsedLabel, 180);
 lv_obj_set_height( ui_ElapsedLabel, LV_SIZE_CONTENT);   /// 1
 lv_obj_set_x( ui_ElapsedLabel, 15 );
 lv_obj_set_y( ui_ElapsedLabel, 140 );
-lv_label_set_text(ui_ElapsedLabel,"Elaspsed Time:");
+lv_label_set_text(ui_ElapsedLabel,"Elapsed Time:");
 lv_obj_set_style_text_color(ui_ElapsedLabel, lv_color_hex(rgb2rbg(0x00faff)), LV_PART_MAIN | LV_STATE_DEFAULT );
 lv_obj_set_style_text_opa(ui_ElapsedLabel, 255, LV_PART_MAIN| LV_STATE_DEFAULT);
 lv_obj_set_style_text_align(ui_ElapsedLabel, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN| LV_STATE_DEFAULT);

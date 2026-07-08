@@ -14,6 +14,8 @@
 #include "driver/gpio.h"
 #include "driver/i2c_master.h"
 #include "driver/spi_master.h"
+#include "driver/gptimer.h"
+
 #include "hal/gpio_types.h"
 #include "hal/spi_types.h"
 
@@ -182,7 +184,7 @@ static i2c_master_dev_handle_t relays;
 
 static QueueHandle_t re_event_queue;
 static rotary_encoder_handle_t re;
-uint16_t speed_increments[] = {1000, 500, 50};
+uint16_t speed_increments[] = {1000, 500, 50, 25};
 uint8_t speed_increment_pointer = 0;
 uint16_t program_spindle_speed = 14000;
 #define DEFAULT_SPEED 14000
@@ -272,16 +274,49 @@ void re_task(void *arg)
 /***** spindle on relay **********/
 
 bool spindle_relay_state = false; // open
+gptimer_handle_t gptimer = NULL;
+gptimer_config_t timer_config = {
+    .clk_src = GPTIMER_CLK_SRC_DEFAULT, // Select the default clock source
+    .direction = GPTIMER_COUNT_UP,      // Counting direction is up
+    .resolution_hz = 1 * 1000 * 1000,   // Resolution is 1 MHz, i.e., 1 tick equals 1 microsecond
+};
+// Create a timer instance
+
+char elapsed_time_string[40] = "0:00:00";
+uint64_t raw_count;
+uint32_t timer_resolution;
+
+
+
+
+void update_elapsed_time() {
+    uint32_t resolution;
+    gptimer_get_raw_count(gptimer, &raw_count); // in ticks
+    long long total_seconds = raw_count/timer_resolution; // time in seconds
+    long long hours = total_seconds / 3600;
+    long long minutes = (total_seconds % 3600) / 60;
+    long long seconds = (total_seconds % 60); 
+    snprintf(elapsed_time_string, sizeof(elapsed_time_string), "%1lld:%02lld:%02lld" , hours, minutes,seconds); 
+    
+
+}
+
+
+
 
 static void spindle_relay_close_event(void *arg, void*data) {
     ESP_LOGI(TAG,"relay closed");
     spindle_relay_state = true;
+       // Start the timer
+    ESP_ERROR_CHECK(gptimer_start(gptimer));
+
 }
 
 static void spindle_relay_open_event(void *arg, void*data) {
     ESP_LOGI(TAG,"relay opened");
     spindle_relay_state = false;
-
+       // Start the timer
+    ESP_ERROR_CHECK(gptimer_stop(gptimer));
 }
 
 
@@ -309,7 +344,7 @@ int program_speed = 14000;
 int run_speed = 0;
 int frequency;
 
-long elapsed_time = 0L;
+
 
 
 
@@ -323,6 +358,8 @@ void update_scr_cb(lv_timer_t *timer)
     /**** run status ***/
     lv_color_t red = lv_color_hex(rgb2rbg(0xff0000));
     lv_color_t green = lv_color_hex(rgb2rbg(0x00ff00));
+    lv_color_t orange = lv_color_hex(rgb2rbg(0xff00d5));
+
     if (blink_counter == 5)
     {
         blink_counter = 0;
@@ -346,12 +383,21 @@ void update_scr_cb(lv_timer_t *timer)
     lv_label_set_text(ui_CurrentSpeed, buff);
     format_with_commas(program_spindle_speed, buff);
     lv_label_set_text(ui_ProgramSpeed, buff);
+    if (program_spindle_speed == RPM_MAX || program_spindle_speed == RPM_MIN) {
+        lv_obj_set_style_text_color(ui_ProgramSpeed, orange,
+                                LV_PART_MAIN | LV_STATE_DEFAULT);
+    } else {
+        lv_obj_set_style_text_color(ui_ProgramSpeed, lv_color_white(),
+                                LV_PART_MAIN | LV_STATE_DEFAULT);
+    }
     frequency = program_spindle_speed/30;
     format_with_commas(frequency, buff);
     lv_label_set_text(ui_Frequency, buff);
 
     /* elapsed time */
 
+    update_elapsed_time();
+    lv_label_set_text(ui_Elapsed, elapsed_time_string);
 
 
     /** STATUS  UPDATE */
@@ -453,6 +499,12 @@ void app_main(void)
     };
 
     button_handle_t spindle_relay;
+
+    ESP_ERROR_CHECK(gptimer_new_timer(&timer_config, &gptimer));
+    // Enable the timer
+    ESP_ERROR_CHECK(gptimer_enable(gptimer));
+    ESP_ERROR_CHECK(gptimer_get_resolution(gptimer, &timer_resolution));
+ 
 
     // Button handle
 
