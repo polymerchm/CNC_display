@@ -1,41 +1,61 @@
 #include <stdio.h>
+#include <sys/lock.h>
+#include <sys/param.h>
+#include <sys/time.h>
+#include <esp_timer.h>
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_task_wdt.h"
 
 #include "driver/gpio.h"
-#include "hal/gpio_types.h"
-#include "esp_adc/adc_oneshot.h"
 #include "driver/i2c_master.h"
-#include "encoder.h"
-
 #include "driver/spi_master.h"
+#include "hal/gpio_types.h"
 #include "hal/spi_types.h"
+
+#include "esp_adc/adc_oneshot.h"
 #include "esp_lcd_ili9341.h"
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_panel_vendor.h"
-#include "esp_lvgl_port.h"
 
-#include <sys/lock.h>
-#include <sys/param.h>
-#include <esp_timer.h>
-#include "esp_task_wdt.h"
-#include "driver/pulse_cnt.h"
+#include "esp_lvgl_port.h"
 #include "lvgl.h"
 
-#include "main.h"
-#include "spindle.h"
 #include "UI/ui.h"
-#include "formatWithCommas.h"
 #include "mcp4725.h"
 #include "ads1115.h"
+#include "encoder.h"
 #include "iot_button.h"
 #include "button_gpio.h"
-#include "colorShifters.h"
 
+/* local helpers*/
+
+#include "colorShifters.h"
+#include "formatWithCommas.h"
+
+#include "main.h"
+
+#ifndef ARRAY
+#define ARRAY_LENGTH(x) (sizeof(x) / sizeof((x)[0]))
+#endif
+#ifndef MIN
+#define MAX(a, b) (((a) > (b)) ? (a) : (b))
+#endif
+#ifndef MAX
+#define MIN(a, b) (((a) < (b)) ? (a) : (b))
+#endif
+
+#define RPM_MIN 4000
+#define RPM_MAX 24000
+#define FM1_MIN 0.0 // analog input from VFD
+#define FM1_MAX 3.0
+#define VF1_MIN 0 // analog output to VFD, frequencey control
+#define VF1_MAX 3.0
 
 static const char *TAG = "CNC";
 
@@ -85,6 +105,8 @@ double time_at_turn_on;    //   time for last segment
 
 int speed = 0;
 bool spindle_on = false;
+long elasped_time = 0;
+
 
 /* encoder */
 
@@ -92,8 +114,6 @@ bool spindle_on = false;
 #define re_channel_b GPIO_NUM_26
 #define re_btn GPIO_NUM_2
 
-int pulse_count = 0;
-int event_count = 0;
 
 /* lcd * */
 
@@ -162,6 +182,13 @@ static i2c_master_dev_handle_t relays;
 
 static QueueHandle_t re_event_queue;
 static rotary_encoder_handle_t re;
+uint16_t speed_increments[] = {1000, 500, 50};
+uint8_t speed_increment_pointer = 0;
+uint16_t program_spindle_speed = 14000;
+#define DEFAULT_SPEED 14000
+
+
+
 
 static void encoder_event_handler(const rotary_encoder_event_t *event, void *ctx)
 {
@@ -187,6 +214,8 @@ void re_task(void *arg)
 
     rotary_encoder_event_t e;
     int32_t val = 0;
+    speed_increment_pointer = 0;
+
 
     ESP_LOGI(TAG, "Initial value: %" PRIi32, val);
     while (1)
@@ -197,6 +226,10 @@ void re_task(void *arg)
         {
             case RE_ET_BTN_PRESSED:
                 ESP_LOGI(TAG, "Button pressed");
+                speed_increment_pointer++;
+                if (speed_increment_pointer > ARRAY_LENGTH(speed_increments) - 1){
+                    speed_increment_pointer = 0;
+                }
                 break;
             case RE_ET_BTN_RELEASED:
                 ESP_LOGI(TAG, "Button released");
@@ -208,12 +241,22 @@ void re_task(void *arg)
                 break;
             case RE_ET_BTN_LONG_PRESSED:
                 ESP_LOGI(TAG, "Looooong pressed button");
-                rotary_encoder_disable_acceleration(re);
+                speed_increment_pointer = 0;
+                program_spindle_speed = (program_spindle_speed/1000)*1000;
                 ESP_LOGI(TAG, "Acceleration disabled");
                 break;
             case RE_ET_CHANGED:
-                val += e.diff;
                 ESP_LOGI(TAG, "Value = %" PRIi32, val);
+                if (e.diff > 0) {
+                    program_spindle_speed = MIN(
+                        (program_spindle_speed + speed_increments[speed_increment_pointer]),
+                        RPM_MAX); 
+                    ESP_LOGI(TAG, "new speed = %" PRIi16, program_spindle_speed);
+                } else if (e.diff < 0) {
+                    program_spindle_speed = MAX((program_spindle_speed - speed_increments[speed_increment_pointer]),
+                        RPM_MIN); 
+                    ESP_LOGI(TAG, "new speed = %" PRIi16, program_spindle_speed);
+                }
                 break;
             default:
                 break;
@@ -225,6 +268,8 @@ void re_task(void *arg)
 
 #define BUTTON_IO_NUM GPIO_NUM_32
 #define BUTTON_ACTIVE_LEVEL 0
+
+/***** spindle on relay **********/
 
 bool spindle_relay_state = false; // open
 
@@ -238,6 +283,7 @@ static void spindle_relay_open_event(void *arg, void*data) {
     spindle_relay_state = false;
 
 }
+
 
 
 /*
@@ -255,22 +301,28 @@ lv_display_t *disp = NULL;
 */
 float input_FM1;
 float voltage2speed;
-#define RPM_MIN 4000
-#define RPM_MAX 24000
-#define FM1_MIN 0.0
-#define FM1_MAX 3.0
+
 
 /* signal to the VFD for programming */
-float output_XXX;
+float output_VF1;
+int program_speed = 14000;
+int run_speed = 0;
+int frequency;
+
+long elapsed_time = 0L;
+
 
 
 int blink_counter = 0;
+/********* ui updating ****************/
+/* N.B.  as a Lvgl timer callback, no lvgl_lock required */
 void update_scr_cb(lv_timer_t *timer)
 {
-    int temp;
     char buff[10];
-    lv_color_t red = lv_color_hex(rgb2rbg( 0xff0000));
-    lv_color_t green = lv_color_hex(rgb2rbg( 0x00ff00));
+    if (lvgl_port_lock(100)) {
+    /**** run status ***/
+    lv_color_t red = lv_color_hex(rgb2rbg(0xff0000));
+    lv_color_t green = lv_color_hex(rgb2rbg(0x00ff00));
     if (blink_counter == 5)
     {
         blink_counter = 0;
@@ -282,32 +334,38 @@ void update_scr_cb(lv_timer_t *timer)
         {
             lv_obj_add_flag(ui_Status, LV_OBJ_FLAG_HIDDEN);
         }
-    } else {
+    }
+    else
+    {
         blink_counter++;
     }
     lv_color_t status_color = (spindle_relay_state ? red : green);
 
-    
-    if (lvgl_port_lock(100))
-    {
-        /** CURRENT SPEED UPDATE */
-        temp = (rand() % (24000 - 23500 + 1)) + 23500;
-        format_with_commas(temp, buff);
-        lv_label_set_text(ui_CurrentSpeed,  buff);
-        /** STATUS  UPDATE */
-        lv_label_set_text(ui_Status,spindle_relay_state ? "ON" : "OFF");
-        lv_obj_set_style_text_color(ui_Status, status_color ,
-            LV_PART_MAIN | LV_STATE_DEFAULT );
-    //    lvgl_port_unlock();     /* does not like the unlock here????            
-    } else {
-        ESP_LOGI(TAG, "Cound not get the lock");
+  /**speed updates */
+    format_with_commas(run_speed, buff);
+    lv_label_set_text(ui_CurrentSpeed, buff);
+    format_with_commas(program_spindle_speed, buff);
+    lv_label_set_text(ui_ProgramSpeed, buff);
+    frequency = program_spindle_speed/30;
+    format_with_commas(frequency, buff);
+    lv_label_set_text(ui_Frequency, buff);
+
+    /* elapsed time */
+
+
+
+    /** STATUS  UPDATE */
+    lv_label_set_text(ui_Status, spindle_relay_state ? "ON" : "OFF");
+    lv_obj_set_style_text_color(ui_Status, status_color,
+                                LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    // /** speed increment update  */
+    lv_label_set_text_fmt(ui_Delta, "%d", speed_increments[speed_increment_pointer]);
     }
 }
 
 void app_main(void)
 {
-
-    
 
     /********************************* i2c master *****************************/
 
@@ -379,7 +437,7 @@ void app_main(void)
 
     char buf[32];
     int tick = 0;
-    int last_pulse = 0;
+
 
     /************** external relay******************* */
 

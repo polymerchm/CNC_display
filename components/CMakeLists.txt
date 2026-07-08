@@ -1,5 +1,5 @@
 idf_component_register(SRCS 
-                            "spindle.c"
+                           
                             "logo.c"
                             "formatWithCommas.c"
                             "ads1115.c"
