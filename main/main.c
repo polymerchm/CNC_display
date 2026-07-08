@@ -3,6 +3,7 @@
 #include <sys/param.h>
 #include <sys/time.h>
 #include <esp_timer.h>
+#include <math.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -58,6 +59,7 @@
 #define FM1_MAX 3.0
 #define VF1_MIN 0 // analog output to VFD, frequencey control
 #define VF1_MAX 3.0
+#define VDD 3.2 // VDD for system, may need adjustments.
 
 static const char *TAG = "CNC";
 
@@ -259,6 +261,11 @@ void re_task(void *arg)
                         RPM_MIN); 
                     ESP_LOGI(TAG, "new speed = %" PRIi16, program_spindle_speed);
                 }
+                // change the output signal to the VFD
+                float new_frequency = (float)program_spindle_speed/30.0;
+                float new_voltage = (new_frequency/800.0)*((float)VF1_MAX);
+                uint16_t new_voltage_value = round(new_voltage/VDD*4095 + 0.5);
+                mcp4725_set_voltage(dac, new_voltage_value);
                 break;
             default:
                 break;
@@ -297,8 +304,6 @@ void update_elapsed_time() {
     long long minutes = (total_seconds % 3600) / 60;
     long long seconds = (total_seconds % 60); 
     snprintf(elapsed_time_string, sizeof(elapsed_time_string), "%1lld:%02lld:%02lld" , hours, minutes,seconds); 
-    
-
 }
 
 
