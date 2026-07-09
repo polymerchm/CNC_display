@@ -240,19 +240,18 @@ void re_task(void *arg)
             break;
 
         case RE_ET_BTN_LONG_PRESSED:
-            ESP_LOGI(TAG, "Looooong pressed button");
+            // ESP_LOGI(TAG, "Looooong pressed button");
             speed_increment_pointer = 0;
             program_spindle_speed = (program_spindle_speed / 1000) * 1000;
             ESP_LOGI(TAG, "Acceleration disabled");
             break;
         case RE_ET_CHANGED:
-            ESP_LOGI(TAG, "Value = %" PRIi32, val);
+            // ESP_LOGI(TAG, "Value = %" PRIi32, val);
             if (e.diff > 0)
             {
                 program_spindle_speed = MIN(
                     (program_spindle_speed + speed_increments[speed_increment_pointer]),
                     RPM_MAX);
-                ESP_LOGI(TAG, "new speed = %" PRIi16, program_spindle_speed);
             }
             else if (e.diff < 0)
             {
@@ -347,7 +346,7 @@ relay_register_t relay_register;
 
 static void spindle_relay_close_event(void *arg, void *data)
 {
-    ESP_LOGI(TAG, "relay closed");
+    // ESP_LOGI(TAG, "relay closed");
     spindle_relay_state = true;
     // Start the timer
     ESP_ERROR_CHECK(gptimer_start(gptimer));
@@ -356,13 +355,13 @@ static void spindle_relay_close_event(void *arg, void *data)
     relay_register.relay_2 = 0;
     relay_register.relay_3 = 0;
     relay_register.relay_4 = 1;
-    ESP_LOGI(TAG, "relays register is %x", relay_register);
+    // ESP_LOGI(TAG, "relays register is %x", relay_register);
     ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_register.raw, sizeof(relay_register.raw), -1));
 }
 
 static void spindle_relay_open_event(void *arg, void *data)
 {
-    ESP_LOGI(TAG, "relay opened");
+    // ESP_LOGI(TAG, "relay opened");
     spindle_relay_state = false;
     // Start the timer
     ESP_ERROR_CHECK(gptimer_stop(gptimer));
@@ -570,5 +569,6 @@ void app_main(void)
 
     xTaskCreate(re_task, "RE_TASK", configMINIMAL_STACK_SIZE * 8, NULL, 5, NULL);
     xTaskCreate(ADC_task, "ADC_task", configMINIMAL_STACK_SIZE * 8, NULL, 3, NULL);
+    //initialize the current speed before leaving?
 
 }
