@@ -238,14 +238,7 @@ void re_task(void *arg)
                 speed_increment_pointer = 0;
             }
             break;
-        // case RE_ET_BTN_RELEASED:
-        //     ESP_LOGI(TAG, "Button released");
-        //     break;
-        // case RE_ET_BTN_CLICKED:
-        //     ESP_LOGI(TAG, "Button clicked");
-        //     rotary_encoder_enable_acceleration(re, 100);
-        //     ESP_LOGI(TAG, "Acceleration enabled");
-        //     break;
+
         case RE_ET_BTN_LONG_PRESSED:
             ESP_LOGI(TAG, "Looooong pressed button");
             speed_increment_pointer = 0;
@@ -298,7 +291,7 @@ static void ADC_task(void *arg)
             ESP_LOGI(TAG, "Could not queue adc data value");
         }
         vTaskDelay(pdMS_TO_TICKS(100));
-        
+
     }
 }
 
@@ -578,13 +571,4 @@ void app_main(void)
     xTaskCreate(re_task, "RE_TASK", configMINIMAL_STACK_SIZE * 8, NULL, 5, NULL);
     xTaskCreate(ADC_task, "ADC_task", configMINIMAL_STACK_SIZE * 8, NULL, 3, NULL);
 
-    while (1)
-    {
-        lv_task_handler();
-        uint16_t raw;
-        float voltage;
-
-        vTaskDelay(pdMS_TO_TICKS(100));
-    }
-    // // // initialize the I2C bus
 }
