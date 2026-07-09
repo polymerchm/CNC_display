@@ -53,6 +53,10 @@
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 #endif
 
+#define foreach(item, array) \
+    for (size_t _i = 0, _keep = 1; _keep && _i < (sizeof(array) / sizeof((array)[0])); _keep = !_keep, _i++) \
+        for (item = (array)[_i]; _keep; _keep = !_keep)
+
 #define RPM_MIN 4000
 #define RPM_MAX 24000
 #define FM1_MIN 0.0 // analog input from VFD
@@ -306,15 +310,35 @@ void update_elapsed_time() {
     snprintf(elapsed_time_string, sizeof(elapsed_time_string), "%1lld:%02lld:%02lld" , hours, minutes,seconds); 
 }
 
+typedef union
+{
+    uint8_t raw; // Access the entire byte at once
 
+    struct
+    { // Anonymous struct mapping individual bits
+        // order is lsb to msb
+        uint8_t unused : 4;  // unused bits (4-7)
+        uint8_t relay_4 : 1; // Bit 3 relay
+        uint8_t relay_3 : 1; // Bit 2 relay
+        uint8_t relay_2 : 1; // Bit 1 relay
+        uint8_t relay_1 : 1; // Bit 0: relay 1 bit
+    };
+} relay_register_t;
 
+relay_register_t relay_register;
 
 static void spindle_relay_close_event(void *arg, void*data) {
     ESP_LOGI(TAG,"relay closed");
     spindle_relay_state = true;
        // Start the timer
     ESP_ERROR_CHECK(gptimer_start(gptimer));
-
+    // close the relays
+    relay_register.relay_1 = 0;
+    relay_register.relay_2 = 1;
+    relay_register.relay_3 = 0;
+    relay_register.relay_4 = 0;
+    ESP_LOGI(TAG,"relays register is %x", relay_register);
+    ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_register.raw, sizeof(relay_register.raw), -1));
 }
 
 static void spindle_relay_open_event(void *arg, void*data) {
@@ -322,7 +346,12 @@ static void spindle_relay_open_event(void *arg, void*data) {
     spindle_relay_state = false;
        // Start the timer
     ESP_ERROR_CHECK(gptimer_stop(gptimer));
+    relay_register.raw = 0xf0;
+    ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_register.raw, sizeof(relay_register.raw), -1));
 }
+
+
+
 
 
 
@@ -429,8 +458,9 @@ void app_main(void)
     ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &dac_i2C_cfg, &dac));
 
     // pull all relays to open (active low)
-    uint8_t relay_buffer = 0xf0;
-    ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_buffer, sizeof(relay_buffer), -1));
+
+    relay_register.raw = 0xf0;
+    ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_register.raw, sizeof(relay_register.raw), -1));
 
     /**************************** LCD ************************ */
 
@@ -490,7 +520,7 @@ void app_main(void)
     int tick = 0;
 
 
-    /************** external relay******************* */
+    /************** Controller  relay (active low) ******************* */
 
     const button_config_t spindle_relay_cfg = {
         .long_press_time = 500, // in ms
