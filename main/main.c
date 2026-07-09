@@ -257,7 +257,7 @@ void re_task(void *arg)
             {
                 program_spindle_speed = MAX((program_spindle_speed - speed_increments[speed_increment_pointer]),
                                             RPM_MIN);
-                ESP_LOGI(TAG, "new speed = %" PRIi16, program_spindle_speed);
+                //ESP_LOGI(TAG, "new speed = %" PRIi16, program_spindle_speed);
             }
             // change the output signal to the VFD
             float new_frequency = (float)program_spindle_speed / 30.0;
@@ -318,7 +318,6 @@ uint32_t timer_resolution;
 
 void update_elapsed_time()
 {
-    uint32_t resolution;
     gptimer_get_raw_count(gptimer, &raw_count);             // in ticks
     long long total_seconds = raw_count / timer_resolution; // time in seconds
     long long hours = total_seconds / 3600;
@@ -534,9 +533,6 @@ void app_main(void)
 
     lv_scr_load_anim(ui_Primary, LV_SCR_LOAD_ANIM_OVER_BOTTOM, 2000, 0, true);
 
-    char buf[32];
-    int tick = 0;
-
     /************** Controller  relay (active low) ******************* */
 
     const button_config_t spindle_relay_cfg = {
@@ -566,9 +562,10 @@ void app_main(void)
     ESP_ERROR_CHECK(ret);
 
     lv_timer_t *refresh_timer = lv_timer_create(update_scr_cb, 100, NULL);
+    
 
     xTaskCreate(re_task, "RE_TASK", configMINIMAL_STACK_SIZE * 8, NULL, 5, NULL);
-    xTaskCreate(ADC_task, "ADC_task", configMINIMAL_STACK_SIZE * 8, NULL, 3, NULL);
+    xTaskCreate(ADC_task, "ADC_TASK", configMINIMAL_STACK_SIZE * 8, NULL, 3, NULL);
     //initialize the current speed before leaving?
 
 }
