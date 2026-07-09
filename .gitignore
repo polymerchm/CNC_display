@@ -15,6 +15,7 @@
 
 # Log files
 *.log
+.history
 
 # Build artifacts and directories
 **/build/
