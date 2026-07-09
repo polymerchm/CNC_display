@@ -133,7 +133,7 @@ long elasped_time = 0;
 #define PIN_RST 22
 
 #define LCD_HOST SPI2_HOST
-#define LCD_PCLK_HZ (40 * 1000 * 1000)
+#define LCD_PCLK_HZ (16 * 1000 * 1000)
 // Native portrait orientation of the ILI9341 panel.
 #define LCD_WIDTH 240
 #define LCD_HEIGHT 320
@@ -334,9 +334,9 @@ static void spindle_relay_close_event(void *arg, void*data) {
     ESP_ERROR_CHECK(gptimer_start(gptimer));
     // close the relays
     relay_register.relay_1 = 0;
-    relay_register.relay_2 = 1;
+    relay_register.relay_2 = 0;
     relay_register.relay_3 = 0;
-    relay_register.relay_4 = 0;
+    relay_register.relay_4 = 1;
     ESP_LOGI(TAG,"relays register is %x", relay_register);
     ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_register.raw, sizeof(relay_register.raw), -1));
 }
@@ -560,7 +560,6 @@ void app_main(void)
     while (1)
     {
         lv_task_handler();
-        
         uint16_t raw;
         float voltage;
         
