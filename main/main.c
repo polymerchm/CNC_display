@@ -53,7 +53,7 @@
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 #endif
 
-#define foreach(item, array) \
+#define foreach(item, array)                                                                                 \
     for (size_t _i = 0, _keep = 1; _keep && _i < (sizeof(array) / sizeof((array)[0])); _keep = !_keep, _i++) \
         for (item = (array)[_i]; _keep; _keep = !_keep)
 
@@ -99,9 +99,9 @@ ROTARY ENCODER
 #define SCL GPIO_NUM_17
 
 /* IIC devices */
-#define ADC_ADDR    (0x48)
-#define RELAY_ADDR  (0x3F)
-#define DAC_ADDR    (0x60)
+#define ADC_ADDR (0x48)
+#define RELAY_ADDR (0x3F)
+#define DAC_ADDR (0x60)
 
 /*==========================================================*/
 /*====================== globals ===========================*/
@@ -115,13 +115,11 @@ int speed = 0;
 bool spindle_on = false;
 long elasped_time = 0;
 
-
 /* encoder */
 
 #define re_channel_a GPIO_NUM_25
 #define re_channel_b GPIO_NUM_26
 #define re_btn GPIO_NUM_2
-
 
 /* lcd * */
 
@@ -137,6 +135,8 @@ long elasped_time = 0;
 // Native portrait orientation of the ILI9341 panel.
 #define LCD_WIDTH 240
 #define LCD_HEIGHT 320
+
+#define ADC_FS 4.096
 
 /* lvgl */
 
@@ -173,7 +173,7 @@ static i2c_device_config_t relay_i2C_cfg = {
 };
 
 /* ADC globals handled by ads1115_t structure **/
-static ads1115_t ads1115_handle; 
+static ads1115_t ads1115_handle;
 
 /* dac globals */
 static i2c_device_config_t dac_i2C_cfg = {
@@ -189,14 +189,13 @@ static i2c_master_dev_handle_t relays;
 // esp-idf-encoder
 
 static QueueHandle_t re_event_queue;
+static QueueHandle_t adc_data_queue;
+
 static rotary_encoder_handle_t re;
 uint16_t speed_increments[] = {1000, 500, 50, 25};
 uint8_t speed_increment_pointer = 0;
 uint16_t program_spindle_speed = 14000;
 #define DEFAULT_SPEED 14000
-
-
-
 
 static void encoder_event_handler(const rotary_encoder_event_t *event, void *ctx)
 {
@@ -224,7 +223,6 @@ void re_task(void *arg)
     int32_t val = 0;
     speed_increment_pointer = 0;
 
-
     ESP_LOGI(TAG, "Initial value: %" PRIi32, val);
     while (1)
     {
@@ -232,50 +230,79 @@ void re_task(void *arg)
 
         switch (e.type)
         {
-            case RE_ET_BTN_PRESSED:
-                ESP_LOGI(TAG, "Button pressed");
-                speed_increment_pointer++;
-                if (speed_increment_pointer > ARRAY_LENGTH(speed_increments) - 1){
-                    speed_increment_pointer = 0;
-                }
-                break;
-            case RE_ET_BTN_RELEASED:
-                ESP_LOGI(TAG, "Button released");
-                break;
-            case RE_ET_BTN_CLICKED:
-                ESP_LOGI(TAG, "Button clicked");
-                rotary_encoder_enable_acceleration(re, 100);
-                ESP_LOGI(TAG, "Acceleration enabled");
-                break;
-            case RE_ET_BTN_LONG_PRESSED:
-                ESP_LOGI(TAG, "Looooong pressed button");
+        case RE_ET_BTN_PRESSED:
+            ESP_LOGI(TAG, "Button pressed");
+            speed_increment_pointer++;
+            if (speed_increment_pointer > ARRAY_LENGTH(speed_increments) - 1)
+            {
                 speed_increment_pointer = 0;
-                program_spindle_speed = (program_spindle_speed/1000)*1000;
-                ESP_LOGI(TAG, "Acceleration disabled");
-                break;
-            case RE_ET_CHANGED:
-                ESP_LOGI(TAG, "Value = %" PRIi32, val);
-                if (e.diff > 0) {
-                    program_spindle_speed = MIN(
-                        (program_spindle_speed + speed_increments[speed_increment_pointer]),
-                        RPM_MAX); 
-                    ESP_LOGI(TAG, "new speed = %" PRIi16, program_spindle_speed);
-                } else if (e.diff < 0) {
-                    program_spindle_speed = MAX((program_spindle_speed - speed_increments[speed_increment_pointer]),
-                        RPM_MIN); 
-                    ESP_LOGI(TAG, "new speed = %" PRIi16, program_spindle_speed);
-                }
-                // change the output signal to the VFD
-                float new_frequency = (float)program_spindle_speed/30.0;
-                float new_voltage = (new_frequency/800.0)*((float)VF1_MAX);
-                uint16_t new_voltage_value = round(new_voltage/VDD*4095 + 0.5);
-                mcp4725_set_voltage(dac, new_voltage_value);
-                break;
-            default:
-                break;
+            }
+            break;
+        // case RE_ET_BTN_RELEASED:
+        //     ESP_LOGI(TAG, "Button released");
+        //     break;
+        // case RE_ET_BTN_CLICKED:
+        //     ESP_LOGI(TAG, "Button clicked");
+        //     rotary_encoder_enable_acceleration(re, 100);
+        //     ESP_LOGI(TAG, "Acceleration enabled");
+        //     break;
+        case RE_ET_BTN_LONG_PRESSED:
+            ESP_LOGI(TAG, "Looooong pressed button");
+            speed_increment_pointer = 0;
+            program_spindle_speed = (program_spindle_speed / 1000) * 1000;
+            ESP_LOGI(TAG, "Acceleration disabled");
+            break;
+        case RE_ET_CHANGED:
+            ESP_LOGI(TAG, "Value = %" PRIi32, val);
+            if (e.diff > 0)
+            {
+                program_spindle_speed = MIN(
+                    (program_spindle_speed + speed_increments[speed_increment_pointer]),
+                    RPM_MAX);
+                ESP_LOGI(TAG, "new speed = %" PRIi16, program_spindle_speed);
+            }
+            else if (e.diff < 0)
+            {
+                program_spindle_speed = MAX((program_spindle_speed - speed_increments[speed_increment_pointer]),
+                                            RPM_MIN);
+                ESP_LOGI(TAG, "new speed = %" PRIi16, program_spindle_speed);
+            }
+            // change the output signal to the VFD
+            float new_frequency = (float)program_spindle_speed / 30.0;
+            float new_voltage = (new_frequency / 800.0) * ((float)VF1_MAX);
+            uint16_t new_voltage_value = round(new_voltage / VDD * 4095 + 0.5);
+            mcp4725_set_voltage(dac, new_voltage_value);
+            break;
+        default:
+            break;
         }
     }
 }
+
+#define ACD_DATA_QUEUE_LENGTH 10
+
+static void ADC_task(void *arg)
+{
+    float next_adc;
+    uint16_t raw_input;
+
+
+    ads1115_set_gain(&ads1115_handle, ADS_FSR_4_096V); // +/- 4.096 FS
+    ads1115_set_sps(&ads1115_handle, ADS_SPS_128);
+    adc_data_queue = xQueueCreate(ACD_DATA_QUEUE_LENGTH, sizeof(next_adc));
+
+    while(1) {
+        raw_input = ads1115_get_raw(&ads1115_handle, 0);
+        next_adc = ads1115_raw_to_voltage(&ads1115_handle, raw_input);
+        if(xQueueSendToBack(adc_data_queue, &next_adc, pdMS_TO_TICKS(100)) != pdTRUE) {
+            ESP_LOGI(TAG, "Could not queue adc data value");
+        }
+        vTaskDelay(pdMS_TO_TICKS(100));
+        
+    }
+}
+
+/******************************* adc task ****************************/
 
 /************ external relay closures *****************/
 
@@ -297,17 +324,15 @@ char elapsed_time_string[40] = "0:00:00";
 uint64_t raw_count;
 uint32_t timer_resolution;
 
-
-
-
-void update_elapsed_time() {
+void update_elapsed_time()
+{
     uint32_t resolution;
-    gptimer_get_raw_count(gptimer, &raw_count); // in ticks
-    long long total_seconds = raw_count/timer_resolution; // time in seconds
+    gptimer_get_raw_count(gptimer, &raw_count);             // in ticks
+    long long total_seconds = raw_count / timer_resolution; // time in seconds
     long long hours = total_seconds / 3600;
     long long minutes = (total_seconds % 3600) / 60;
-    long long seconds = (total_seconds % 60); 
-    snprintf(elapsed_time_string, sizeof(elapsed_time_string), "%1lld:%02lld:%02lld" , hours, minutes,seconds); 
+    long long seconds = (total_seconds % 60);
+    snprintf(elapsed_time_string, sizeof(elapsed_time_string), "%1lld:%02lld:%02lld", hours, minutes, seconds);
 }
 
 typedef union
@@ -327,38 +352,34 @@ typedef union
 
 relay_register_t relay_register;
 
-static void spindle_relay_close_event(void *arg, void*data) {
-    ESP_LOGI(TAG,"relay closed");
+static void spindle_relay_close_event(void *arg, void *data)
+{
+    ESP_LOGI(TAG, "relay closed");
     spindle_relay_state = true;
-       // Start the timer
+    // Start the timer
     ESP_ERROR_CHECK(gptimer_start(gptimer));
     // close the relays
     relay_register.relay_1 = 0;
     relay_register.relay_2 = 0;
     relay_register.relay_3 = 0;
     relay_register.relay_4 = 1;
-    ESP_LOGI(TAG,"relays register is %x", relay_register);
+    ESP_LOGI(TAG, "relays register is %x", relay_register);
     ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_register.raw, sizeof(relay_register.raw), -1));
 }
 
-static void spindle_relay_open_event(void *arg, void*data) {
-    ESP_LOGI(TAG,"relay opened");
+static void spindle_relay_open_event(void *arg, void *data)
+{
+    ESP_LOGI(TAG, "relay opened");
     spindle_relay_state = false;
-       // Start the timer
+    // Start the timer
     ESP_ERROR_CHECK(gptimer_stop(gptimer));
     relay_register.raw = 0xf0;
     ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_register.raw, sizeof(relay_register.raw), -1));
 }
 
-
-
-
-
-
 /*
  *   ======================== APP_MAIN =========================
  */
-
 
 int last_count = 0;
 lv_display_t *disp = NULL;
@@ -371,76 +392,81 @@ lv_display_t *disp = NULL;
 float input_FM1;
 float voltage2speed;
 
-
 /* signal to the VFD for programming */
 float output_VF1;
 int program_speed = 14000;
 int run_speed = 0;
 int frequency;
 
-
-
-
-
 int blink_counter = 0;
 /********* ui updating ****************/
 /* N.B.  as a Lvgl timer callback, no lvgl_lock required */
 void update_scr_cb(lv_timer_t *timer)
 {
+    float next_adc_value;
+
     char buff[10];
-    if (lvgl_port_lock(100)) {
-    /**** run status ***/
-    lv_color_t red = lv_color_hex(rgb2rbg(0xff0000));
-    lv_color_t green = lv_color_hex(rgb2rbg(0x00ff00));
-    lv_color_t orange = lv_color_hex(rgb2rbg(0xff00d5));
-
-    if (blink_counter == 5)
+    if (lvgl_port_lock(100))
     {
-        blink_counter = 0;
-        if (lv_obj_has_flag(ui_Status, LV_OBJ_FLAG_HIDDEN))
+        /**** run status ***/
+        lv_color_t red = lv_color_hex(rgb2rbg(0xff0000));
+        lv_color_t green = lv_color_hex(rgb2rbg(0x00ff00));
+        lv_color_t orange = lv_color_hex(rgb2rbg(0xff00d5));
+
+        if (blink_counter == 5)
         {
-            lv_obj_clear_flag(ui_Status, LV_OBJ_FLAG_HIDDEN);
+            blink_counter = 0;
+            if (lv_obj_has_flag(ui_Status, LV_OBJ_FLAG_HIDDEN))
+            {
+                lv_obj_clear_flag(ui_Status, LV_OBJ_FLAG_HIDDEN);
+            }
+            else if (spindle_relay_state)
+            {
+                lv_obj_add_flag(ui_Status, LV_OBJ_FLAG_HIDDEN);
+            }
         }
-        else if (spindle_relay_state)
+        else
         {
-            lv_obj_add_flag(ui_Status, LV_OBJ_FLAG_HIDDEN);
+            blink_counter++;
         }
-    }
-    else
-    {
-        blink_counter++;
-    }
-    lv_color_t status_color = (spindle_relay_state ? red : green);
+        lv_color_t status_color = (spindle_relay_state ? red : green);
 
-  /**speed updates */
-    format_with_commas(run_speed, buff);
-    lv_label_set_text(ui_CurrentSpeed, buff);
-    format_with_commas(program_spindle_speed, buff);
-    lv_label_set_text(ui_ProgramSpeed, buff);
-    if (program_spindle_speed == RPM_MAX || program_spindle_speed == RPM_MIN) {
-        lv_obj_set_style_text_color(ui_ProgramSpeed, orange,
-                                LV_PART_MAIN | LV_STATE_DEFAULT);
-    } else {
-        lv_obj_set_style_text_color(ui_ProgramSpeed, lv_color_white(),
-                                LV_PART_MAIN | LV_STATE_DEFAULT);
-    }
-    frequency = program_spindle_speed/30;
-    format_with_commas(frequency, buff);
-    lv_label_set_text(ui_Frequency, buff);
+        /**speed updates */
+        if (xQueueReceive(adc_data_queue, &next_adc_value, pdMS_TO_TICKS(100)))
+        {
+            run_speed = round(next_adc_value / FM1_MAX * RPM_MAX);
+        }
 
-    /* elapsed time */
+        format_with_commas(run_speed, buff);
+        lv_label_set_text(ui_CurrentSpeed, buff);
+        format_with_commas(program_spindle_speed, buff);
+        lv_label_set_text(ui_ProgramSpeed, buff);
+        if (program_spindle_speed == RPM_MAX || program_spindle_speed == RPM_MIN)
+        {
+            lv_obj_set_style_text_color(ui_ProgramSpeed, orange,
+                                        LV_PART_MAIN | LV_STATE_DEFAULT);
+        }
+        else
+        {
+            lv_obj_set_style_text_color(ui_ProgramSpeed, lv_color_white(),
+                                        LV_PART_MAIN | LV_STATE_DEFAULT);
+        }
+        frequency = program_spindle_speed / 30;
+        format_with_commas(frequency, buff);
+        lv_label_set_text(ui_Frequency, buff);
 
-    update_elapsed_time();
-    lv_label_set_text(ui_Elapsed, elapsed_time_string);
+        /* elapsed time */
 
+        update_elapsed_time();
+        lv_label_set_text(ui_Elapsed, elapsed_time_string);
 
-    /** STATUS  UPDATE */
-    lv_label_set_text(ui_Status, spindle_relay_state ? "ON" : "OFF");
-    lv_obj_set_style_text_color(ui_Status, status_color,
-                                LV_PART_MAIN | LV_STATE_DEFAULT);
+        /** STATUS  UPDATE */
+        lv_label_set_text(ui_Status, spindle_relay_state ? "ON" : "OFF");
+        lv_obj_set_style_text_color(ui_Status, status_color,
+                                    LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    // /** speed increment update  */
-    lv_label_set_text_fmt(ui_Delta, "%d", speed_increments[speed_increment_pointer]);
+        // /** speed increment update  */
+        lv_label_set_text_fmt(ui_Delta, "%d", speed_increments[speed_increment_pointer]);
     }
 }
 
@@ -454,7 +480,7 @@ void app_main(void)
     ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &relay_i2C_cfg, &relays));
     // ininitailize ADC - calls i2c_master_bus_add_device internally
     ESP_ERROR_CHECK(ads1115_init(&ads1115_handle, &bus_handle, ADC_ADDR, 100000));
-    // initialize DAC board 
+    // initialize DAC board
     ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &dac_i2C_cfg, &dac));
 
     // pull all relays to open (active low)
@@ -480,7 +506,7 @@ void app_main(void)
     esp_lcd_panel_handle_t panel = NULL;
     esp_lcd_panel_dev_config_t panel_config = {
         .reset_gpio_num = PIN_RST,
-        .rgb_ele_order =    LCD_RGB_ELEMENT_ORDER_RGB,
+        .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_RGB,
         .bits_per_pixel = 16,
     };
     ESP_ERROR_CHECK(esp_lcd_new_panel_ili9341(io, &panel_config, &panel));
@@ -519,14 +545,12 @@ void app_main(void)
     char buf[32];
     int tick = 0;
 
-
     /************** Controller  relay (active low) ******************* */
 
     const button_config_t spindle_relay_cfg = {
         .long_press_time = 500, // in ms
-        .short_press_time = 200
-    };
-    
+        .short_press_time = 200};
+
     const button_gpio_config_t spindle_relay_gpio_cfg = {
         .gpio_num = BUTTON_IO_NUM,
         .active_level = BUTTON_ACTIVE_LEVEL,
@@ -539,7 +563,6 @@ void app_main(void)
     // Enable the timer
     ESP_ERROR_CHECK(gptimer_enable(gptimer));
     ESP_ERROR_CHECK(gptimer_get_resolution(gptimer, &timer_resolution));
- 
 
     // Button handle
 
@@ -550,23 +573,18 @@ void app_main(void)
     ret = iot_button_register_cb(spindle_relay, BUTTON_PRESS_END, NULL, spindle_relay_open_event, NULL);
     ESP_ERROR_CHECK(ret);
 
-    lv_timer_t * refresh_timer = lv_timer_create(update_scr_cb, 100, NULL);
+    lv_timer_t *refresh_timer = lv_timer_create(update_scr_cb, 100, NULL);
 
-    ads1115_set_gain(&ads1115_handle, ADS_FSR_4_096V); // +/- 4.096 FS
-    ads1115_set_sps(&ads1115_handle, ADS_SPS_128);
-    
-    xTaskCreate(re_task, TAG, configMINIMAL_STACK_SIZE * 8, NULL, 5, NULL);
+    xTaskCreate(re_task, "RE_TASK", configMINIMAL_STACK_SIZE * 8, NULL, 5, NULL);
+    xTaskCreate(ADC_task, "ADC_task", configMINIMAL_STACK_SIZE * 8, NULL, 3, NULL);
 
     while (1)
     {
         lv_task_handler();
         uint16_t raw;
         float voltage;
-        
+
         vTaskDelay(pdMS_TO_TICKS(100));
     }
     // // // initialize the I2C bus
-    // xTaskCreate(ADC_task, "ADC_task", 512, &ucParameterToPass, 3, &xHandle);
-    // xTaskCreate(display_task, "display_task", 512, &ucParameterToPass, 3, &xHandle);
-    // xTaskCreate(relay_task, "relay", 512, &ucParameterToPass, 3, &xHandle);
 }
