@@ -256,7 +256,7 @@
     "pinned_symbol_libs": []
   },
   "meta": {
-    "filename": "CNC_router.kicad_pro",
+    "filename": "touch sensor indicators.kicad_pro",
     "version": 3
   },
   "net_settings": {
@@ -411,17 +411,17 @@
     "subpart_id_separator": 0,
     "top_level_sheets": [
       {
-        "filename": "CNC_router.kicad_sch",
+        "filename": "touch sensor indicators.kicad_sch",
         "name": "Root",
-        "uuid": "10c7a81d-d8e0-4023-94dc-af5199d847de"
+        "uuid": "ce50a6b5-ae4b-4db6-a0e7-14842a3c091e"
       }
     ],
-    "used_designators": "#PWR10-12",
+    "used_designators": "",
     "variants": []
   },
   "sheets": [
     [
-      "10c7a81d-d8e0-4023-94dc-af5199d847de",
+      "ce50a6b5-ae4b-4db6-a0e7-14842a3c091e",
       "Root"
     ]
   ],

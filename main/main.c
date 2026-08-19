@@ -298,12 +298,12 @@ static void ADC_task(void *arg)
 
 /************ external relay closures *****************/
 
-#define BUTTON_IO_NUM GPIO_NUM_32
-#define BUTTON_ACTIVE_LEVEL 0
+#define RUN_SENSE_PIN GPIO_NUM_32
+#define RUN_SENSE_ACTIVE_LEVEL 0
 
 /***** spindle on relay **********/
 
-bool spindle_relay_state = false; // open
+bool run_sense_relay_state = false; // open
 gptimer_handle_t gptimer = NULL;
 gptimer_config_t timer_config = {
     .clk_src = GPTIMER_CLK_SRC_DEFAULT, // Select the default clock source
@@ -343,10 +343,10 @@ typedef union
 
 relay_register_t relay_register;
 
-static void spindle_relay_close_event(void *arg, void *data)
+static void run_sense_relay_close_event(void *arg, void *data)
 {
     // ESP_LOGI(TAG, "relay closed");
-    spindle_relay_state = true;
+    run_sense_relay_state = true;
     // Start the timer
     ESP_ERROR_CHECK(gptimer_start(gptimer));
     // close the relays
@@ -358,10 +358,10 @@ static void spindle_relay_close_event(void *arg, void *data)
     ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_register.raw, sizeof(relay_register.raw), -1));
 }
 
-static void spindle_relay_open_event(void *arg, void *data)
+static void run_sense_relay_open_event(void *arg, void *data)
 {
     // ESP_LOGI(TAG, "relay opened");
-    spindle_relay_state = false;
+    run_sense_relay_state = false;
     // Start the timer
     ESP_ERROR_CHECK(gptimer_stop(gptimer));
     relay_register.raw = 0xf0;
@@ -411,7 +411,7 @@ void update_scr_cb(lv_timer_t *timer)
             {
                 lv_obj_clear_flag(ui_Status, LV_OBJ_FLAG_HIDDEN);
             }
-            else if (spindle_relay_state)
+            else if (run_sense_relay_state)
             {
                 lv_obj_add_flag(ui_Status, LV_OBJ_FLAG_HIDDEN);
             }
@@ -420,7 +420,7 @@ void update_scr_cb(lv_timer_t *timer)
         {
             blink_counter++;
         }
-        lv_color_t status_color = (spindle_relay_state ? red : green);
+        lv_color_t status_color = (run_sense_relay_state ? red : green);
 
         /**speed updates */
         if (xQueueReceive(adc_data_queue, &next_adc_value, pdMS_TO_TICKS(100)))
@@ -452,7 +452,7 @@ void update_scr_cb(lv_timer_t *timer)
         lv_label_set_text(ui_Elapsed, elapsed_time_string);
 
         /** STATUS  UPDATE */
-        lv_label_set_text(ui_Status, spindle_relay_state ? "ON" : "OFF");
+        lv_label_set_text(ui_Status, run_sense_relay_state ? "ON" : "OFF");
         lv_obj_set_style_text_color(ui_Status, status_color,
                                     LV_PART_MAIN | LV_STATE_DEFAULT);
 
@@ -535,17 +535,17 @@ void app_main(void)
 
     /************** Controller  relay (active low) ******************* */
 
-    const button_config_t spindle_relay_cfg = {
+    const button_config_t run_sense_relay_cfg = {
         .long_press_time = 500, // in ms
         .short_press_time = 200};
 
-    const button_gpio_config_t spindle_relay_gpio_cfg = {
-        .gpio_num = BUTTON_IO_NUM,
-        .active_level = BUTTON_ACTIVE_LEVEL,
+    const button_gpio_config_t run_sense_relay_gpio_cfg = {
+        .gpio_num = RUN_SENSE_PIN,
+        .active_level = RUN_SENSE_ACTIVE_LEVEL,
         .disable_pull = false,
     };
 
-    button_handle_t spindle_relay;
+    button_handle_t run_sense_relay;
 
     ESP_ERROR_CHECK(gptimer_new_timer(&timer_config, &gptimer));
     // Enable the timer
@@ -554,11 +554,11 @@ void app_main(void)
 
     // Button handle
 
-    esp_err_t ret = iot_button_new_gpio_device(&spindle_relay_cfg, &spindle_relay_gpio_cfg, &spindle_relay);
+    esp_err_t ret = iot_button_new_gpio_device(&run_sense_relay_cfg, &run_sense_relay_gpio_cfg, &run_sense_relay);
 
-    ret = iot_button_register_cb(spindle_relay, BUTTON_PRESS_DOWN, NULL, spindle_relay_close_event, NULL);
+    ret = iot_button_register_cb(run_sense_relay, BUTTON_PRESS_DOWN, NULL, run_sense_relay_close_event, NULL);
     ESP_ERROR_CHECK(ret);
-    ret = iot_button_register_cb(spindle_relay, BUTTON_PRESS_END, NULL, spindle_relay_open_event, NULL);
+    ret = iot_button_register_cb(run_sense_relay, BUTTON_PRESS_END, NULL, run_sense_relay_open_event, NULL);
     ESP_ERROR_CHECK(ret);
 
     lv_timer_t *refresh_timer = lv_timer_create(update_scr_cb, 100, NULL);

@@ -5,7 +5,7 @@
     "interface/ftdi/esp_ftdi.cfg",
     "target/esp32.cfg"
   ],
-  "idf.port": "/dev/tty.usbserial-0001",
+  "idf.port": "/dev/tty.usbmodem5C630528501",
   "idf.currentSetup": "/Users/spollack/.espressif/v6.0.1/esp-idf",
   "idf.customExtraVars": {
     "IDF_TARGET": "esp32"

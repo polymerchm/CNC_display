@@ -60,6 +60,60 @@ Adafruit (STEMMA) I2C
     White = SDA
     Green = SCL
 
+USB-C Data Cable
+    Sheild - GND
+    Blue - D+
+    White - D-
+
+
+22/8 Cable (used for GX12-7 connector)
+    Red
+    Black
+    White
+    Green
+    Yellow
+    Brown
+    Orange
+    Blue
+
+GX-12-2 connector (TechnoCNC Command)
+    Pin 1 - left of alighment = Common 
+    Pin 2 - Right of alignment = Command (floating)
+
+GX12-4 connector
+    Pin 1 - left of alighnment then CCW to Pin 4
+    Pin 1 - LED_PLUS
+    PIN 2 - LED_RED
+    PIN 3 - LED_YELLOW
+    PIN 4 - LED_GREEN 
+
+GX-4 Cabling
+    Black - LED_PLUS
+    Red - LED_RED
+    White - LED_GREEN
+    Yellow - LED_YELLOW
+
+GX12-3 connectors
+    Pin 1 right of the alignment slot then CW to  Pin 3
+    Pin 1 - signal from relay
+    Pin 2 - NC
+    Pin 3 - GND
+
+
+GX12-7 Connector, Vied from solder points
+    Pin 1 - left of alignment pin, then CCW around to Pin 6
+    Pin 7 in the center.
+
+    Pin 1 - VFD Run Sense (GPIO32)
+    Pin 2 - VFD FM1 (ADC in)
+    Pin 3 - VFD VF1 (DAC out)
+    Pin 4 - VFD GND (tied to system ground/neutral of power 5V power)
+    PIN 5 - VFD 24V (LED_PLUS)
+    Pin 6 - VFD Common (also to off/auto pin 2 )
+    Pin 7 - VFD DI1 (also to off/auto pin 4)
+
+
+
 NOTE:
 
 LVGL (using version 8.4 for SwquareLine Studio compatibility) expects color in RBG order, NOT RGB.   helper function rgb2rbg etc fixes that.

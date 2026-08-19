@@ -1,5 +1,5 @@
-#ifndef MAIN_MAIN
-#define MAIN_MAIN
+#ifndef MAIN_INCLUDE_MAIN
+#define MAIN_INCLUDE_MAIN
 
 
 
@@ -32,4 +32,4 @@
 
 
 
-#endif  /* MAIN_MAIN */
+#endif  /* MAIN_INCLUDE_MAIN */
