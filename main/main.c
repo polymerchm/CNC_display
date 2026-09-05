@@ -35,6 +35,7 @@
 #include "encoder.h"
 #include "iot_button.h"
 #include "button_gpio.h"
+#include "led_strip.h"
 
 /* local helpers*/
 
@@ -71,6 +72,8 @@ static const char *TAG = "CNC";
 
         Bodgery CNC-Router Heads-Up Display
 
+        MPU - Freenove ESP32
+
 */
 
 /* GPIO Inventory
@@ -78,25 +81,26 @@ General GPIO
     SPINDLE RELAY 32
 
 I2C (DAC, ADC, Relays)
-    SDA 16 (RX on DEVKIT V1)
-    SCL 17 (TX on DEVKIT V1)
+    SDA 21 (RX on DEVKIT V1)
+    SCL 22 (TX on DEVKIT V1)
 
 LCD (SPI)
     PBKL 4
     LCD_CS 5
     CLK  18
-    LCD_DC 21
+    LCD_DC 19
     RST  22
     MOSI 23
+    LE/BLK  2
 
 ROTARY ENCODER
     CLK    25
     DT     26
-    BTN    2
+    BTN    33
 */
 
-#define SDA GPIO_NUM_16
-#define SCL GPIO_NUM_17
+#define SDA GPIO_NUM_21
+#define SCL GPIO_NUM_22
 
 /* IIC devices */
 #define ADC_ADDR (0x48)
@@ -119,7 +123,7 @@ long elasped_time = 0;
 
 #define re_channel_a GPIO_NUM_25
 #define re_channel_b GPIO_NUM_26
-#define re_btn GPIO_NUM_2
+#define re_btn GPIO_NUM_33
 
 /* lcd * */
 
@@ -127,8 +131,9 @@ long elasped_time = 0;
 #define PIN_MOSI 23
 #define PIN_SCK 18
 #define PIN_CS 5
-#define PIN_DC 21
-#define PIN_RST 22
+#define PIN_DC 19
+#define PIN_RST 15
+#define PIN_LED 2
 
 #define LCD_HOST SPI2_HOST
 #define LCD_PCLK_HZ (16 * 1000 * 1000)
@@ -231,7 +236,7 @@ void re_task(void *arg)
         switch (e.type)
         {
         case RE_ET_BTN_PRESSED:
-            ESP_LOGI(TAG, "Button pressed");
+            // ESP_LOGI(TAG, "Button pressed");
             speed_increment_pointer++;
             if (speed_increment_pointer > ARRAY_LENGTH(speed_increments) - 1)
             {
@@ -269,6 +274,31 @@ void re_task(void *arg)
             break;
         }
     }
+}
+
+#include "driver/gpio.h"
+#include "led_strip.h"
+
+// 1. Initialize the strip handle globally or inside your function
+led_strip_handle_t led_strip = NULL;
+
+void configure_neopixel(void) {
+    led_strip_config_t strip_config = {
+        .strip_gpio_num = 16, // Pin 16
+        .max_leds = 1,        // Change to your number of LEDs if more than 1
+    };
+    
+    led_strip_rmt_config_t rmt_config = {
+        .resolution_hz = 10 * 1000 * 1000, // 10MHz
+        .flags.with_dma = false,
+    };
+    
+    ESP_ERROR_CHECK(led_strip_new_rmt_device(&strip_config, &rmt_config, &led_strip));
+}
+
+void turn_off_neopixel(void) {
+    // 2. Clear all pixels (set color data to 0)
+    led_strip_clear(led_strip);
 }
 
 #define ACD_DATA_QUEUE_LENGTH 10
@@ -354,7 +384,7 @@ static void run_sense_relay_close_event(void *arg, void *data)
     relay_register.relay_2 = 0;
     relay_register.relay_3 = 0;
     relay_register.relay_4 = 1;
-    // ESP_LOGI(TAG, "relays register is %x", relay_register);
+    ESP_LOGI(TAG, "relays register is %x", relay_register);
     ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_register.raw, sizeof(relay_register.raw), -1));
 }
 
@@ -365,6 +395,7 @@ static void run_sense_relay_open_event(void *arg, void *data)
     // Start the timer
     ESP_ERROR_CHECK(gptimer_stop(gptimer));
     relay_register.raw = 0xf0;
+    ESP_LOGI(TAG, "relays register is %x", relay_register);
     ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_register.raw, sizeof(relay_register.raw), -1));
 }
 
@@ -463,6 +494,9 @@ void update_scr_cb(lv_timer_t *timer)
 
 void app_main(void)
 {
+    configure_neopixel();
+    turn_off_neopixel();
+
 
     /********************************* i2c master *****************************/
 
@@ -481,7 +515,7 @@ void app_main(void)
 
     /**************************** LCD ************************ */
 
-    ESP_LOGI(TAG, "Hello ESP32-S31");
+    ESP_LOGI(TAG, "Hello ESP32");
     ESP_LOGI(TAG, "Initialising SPI bus on host %d (MOSI=%d, SCK=%d)", LCD_HOST, PIN_MOSI, PIN_SCK);
 
     spi_bus_config_t buscfg = ILI9341_PANEL_BUS_SPI_CONFIG(PIN_SCK, PIN_MOSI,
@@ -501,6 +535,17 @@ void app_main(void)
         .bits_per_pixel = 16,
     };
     ESP_ERROR_CHECK(esp_lcd_new_panel_ili9341(io, &panel_config, &panel));
+
+    /* LCD backlight */
+
+    const gpio_config_t lcd_backlight_cfg = {
+        .pin_bit_mask = (1ULL << PIN_LED),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE
+    };
+    ESP_ERROR_CHECK(gpio_config(&lcd_backlight_cfg));
+    ESP_ERROR_CHECK(gpio_set_level(PIN_LED, 1));
 
     ESP_ERROR_CHECK(esp_lcd_panel_reset(panel));
     ESP_ERROR_CHECK(esp_lcd_panel_init(panel));
@@ -529,8 +574,10 @@ void app_main(void)
     };
     disp = lvgl_port_add_disp(&disp_cfg);
 
-    ui_init();
+    ui_init(); // splash screen
+    vTaskDelay(pdMS_TO_TICKS(2000));
 
+    // now the pimary screen
     lv_scr_load_anim(ui_Primary, LV_SCR_LOAD_ANIM_OVER_BOTTOM, 2000, 0, true);
 
     /************** Controller  relay (active low) ******************* */
@@ -552,7 +599,7 @@ void app_main(void)
     ESP_ERROR_CHECK(gptimer_enable(gptimer));
     ESP_ERROR_CHECK(gptimer_get_resolution(gptimer, &timer_resolution));
 
-    // Button handle
+    // run_ sense relay handle
 
     esp_err_t ret = iot_button_new_gpio_device(&run_sense_relay_cfg, &run_sense_relay_gpio_cfg, &run_sense_relay);
 
@@ -562,6 +609,8 @@ void app_main(void)
     ESP_ERROR_CHECK(ret);
 
     lv_timer_t *refresh_timer = lv_timer_create(update_scr_cb, 100, NULL);
+    (void)refresh_timer;
+    
     
 
     xTaskCreate(re_task, "RE_TASK", configMINIMAL_STACK_SIZE * 8, NULL, 5, NULL);

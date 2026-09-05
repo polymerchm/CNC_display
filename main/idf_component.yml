@@ -4,3 +4,4 @@ dependencies:
   esp-idf-lib/encoder: ^3.0.2
   espressif/esp_lvgl_port: ^2.8.0~1
   espressif/button: ^4.2.0
+  espressif/led_strip: ^3.0.3
