@@ -1,52 +1,52 @@
 
 Bodgery CNC-Router Heads-Up Display
 
-Rev 0:
-    reads FM1 via an I2C ADC - a voltage proportional to the spindle frequency/speed
-        ADC Model: Sparkfun ADS 1115
+Rev 0
+- reads FM1 via an I2C ADC - a voltage proportional to the spindle frequency/speed
+    - ADC Model: Sparkfun ADS 1115
+- send a voltage between 0 and 10V to program the VFD
+    - DAC Model: Sparkfun MCP4725 
 
-    send a voltage between 0 and 10V to program the VFD
-        DAC Model: Sparkfun MCP4725 
-
-    using a rotory encoder to change the desired spindle speed ( programs the to the DAC)
+- using a rotory encoder to change the desired spindle speed ( programs the to the DAC)
     
-    monitors the T1 line for spindle turn on
-        GPIO line 32 pulled up, looking for active low (toggles on any change)
-        ISR is debounced
-    accumulates the spindle time since bootup
-        task running in background when spindle is on.
-    displays relevant information
+- monitors the T1 line for spindle turn on
+    - GPIO line 32 pulled up, looking for active low (toggles on any change)
+    - ISR is debounced
+- accumulates the spindle time since bootup
+    - task running in background when spindle is on.
+    - displays relevant information
 
-    spindle_active_task:
-        monitors spindle state
+- spindle_active_task:
+    - monitors spindle state
 
-    ADC_task:
-        gets current frequency by reading the ADC and converting 
+- ADC_task:
+    - gets current frequency by reading the ADC and converting 
 
-    DAC_task
-        monitors its queue change changes the output voltage
+- DAC_task
+    - monitors its queue change changes the output voltage
+- Rotory encoder task
+    - send new voltage to the DAC queue
+    - update the speed incrincrementetement (using button)
+- display_task:
+    -  updates programmed RPM
+    - updated accumulated spindle time
+    - display spindle state
+    - update elasped usage time
 
-    Rotory encoder task
-        send new voltage to the DAC queue
-    display_task:
-        updates programmed RPM
-        updated accumulated spindle time
-        display spindle state
-
-    relay_task:
-        base on spindle state:
-            turns on/off the relays
-                chiller (0-5v)
-                dust collector (0-5V)
-                red/yellow LED (DPDT switch in AUTO) (green when DPDT switch in OFF position)
-
-
+- relay_task:
+    -  base on spindle state:
+        - turns on/off the relays
+            - chiller (0-5v)
+            - dust collector (0-5V)
+            - red/yellow LED (DPDT switch in AUTO) (green when DPDT switch in OFF position)
+---
 
 Rev 1
-    monitors/displays sound levels
-    MQTT logging
-    scrape data from fob reader api
+- monitors/displays sound levels
+- MQTT logging
+- scrape data from fob reader api
 
+---
 
 Sparkfun qwik (I2C) cables
 - Black = GND 
@@ -153,7 +153,7 @@ I2C Connections (relay board)
 - GND - qwic connect on ADV
 - Vcc - +5v on ESP32
 
-
+---
 NOTE:
 
 - LVGL (using version 8.4 for SwquareLine Studio compatibility) expects color in RBG order, NOT RGB.   helper function rgb2rbg etc fixes that.
