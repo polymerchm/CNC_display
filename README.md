@@ -47,7 +47,7 @@ Rev 1
 - scrape data from fob reader api
 
 ---
-
+    
 Sparkfun qwik (I2C) cables
 - Black = GND 
 - Red = 3.3V 
@@ -94,16 +94,20 @@ GX12-4 connector
 - PIN 4 - LED_GREEN - green wire
 
 GX-4 Cabling
-- Black - LED_PLUS 
-- Red - LED_RED
-- White - LED_GREEN
-- Yellow - LED_YELLOW
+- Black - LED_PLUS  - Pin 1
+- Red - LED_RED - Pin 2
+- Yellow - LED_YELLOW - Pin 3
+- White - LED_GREEN - Pin 4
 
-GX12-3 connectors
+mini XLR 3 pin connectors
 Pin 1 right of the alignment slot then CW to  Pin 3
 - Pin 1 - signal from relay to power strip enable (chiller yellow wire, dust collector blue wire)
 - Pin 2 - NC
-- Pin 3 - GND (white wire )                                                                )
+- Pin 3 - GND (white wire )       
+
+XLR Cables
+- Pin 1  - Red wire
+- Pin 3  - Black wire                                                         )
 
 
 GX12-7 Connector, As viewed from solder points
