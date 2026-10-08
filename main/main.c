@@ -383,7 +383,7 @@ static void run_sense_relay_close_event(void *arg, void *data)
     relay_register.relay_1 = 0;
     relay_register.relay_2 = 0;
     relay_register.relay_3 = 0;
-    relay_register.relay_4 = 1;
+    relay_register.relay_4 = 0;
     ESP_LOGI(TAG, "relays register is %x", relay_register);
     ESP_ERROR_CHECK(i2c_master_transmit(relays, &relay_register.raw, sizeof(relay_register.raw), -1));
 }

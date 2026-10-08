@@ -36,9 +36,10 @@ Rev 0
 - relay_task:
     -  base on spindle state:
         - turns on/off the relays
-            - chiller (0-5v)
-            - dust collector (0-5V)
-            - red/yellow LED (DPDT switch in AUTO) (green when DPDT switch in OFF position)
+            - #1 chiller (0-5v)
+            - #2 dust collector (0-5V)
+            - #3 red/yellow LED (DPDT switch in AUTO) (green when DPDT switch in OFF position)
+            - #4 FOB active status 
 ---
 
 Rev 1
@@ -73,18 +74,23 @@ Off/Auto Switch
 - 5- Common 2 :  SPINDLE_CMD (white wire from GX1-2 spindle_CMD))
 - 6- Auto 2 : NC
 
-22/8 Cable (used for GX12-7 connector)
-- Red - 1
-- Black - 2
-- White - 3
-- Green - 4
-- Yellow - 5
-- Brown - 6
+22/8 Cable (used for GX12-8 connector)
+- Black - 1
+- Brown - 2
+- Red - 3
+- Orange - 4
+- Green - 5
+- Yellow - 6
 - Blue - 7
+- White - 8
 
 GX-12-2 connector (TechnoCNC Command) [ start motor relay on TechnoCNC controller]
 - Pin 1 - left of alighment = Common (green wire  connected to GX-12 pin 6, green wire)
 - Pin 2 - Right of alignment = Command (floating) - white wire 
+
+GX-12-2 connector (FOB SYstem) [ tell FOB maching is running ]
+- Pin 1 -  FOB GND (Relay #4 common)
+- Pin 2 -  Active (Relay #4, NO)
 
 GX12-4 connector
 - Pin 1 - left of alighnment then CCW to Pin 4
@@ -110,15 +116,17 @@ XLR Cables
 - Pin 3  - Black wire                                                         )
 
 
-GX12-7 Connector, As viewed from solder points
-Pin 1 - left of alignment pin, then CCW around to Pin 6.  Pin 7 in the center.
-- Pin 1 - VFD Run Sense (GPIO32) blue wire [ programmed relay on the VFD, closed when running ]
+GX16-8 Connector, As viewed from solder points
+
+- Pin 1 - left of alignment pin, then CCW around to Pin 6.  Pin 7 in the center.<br><br>
+- Pin 1 - Controller Run Sense
 - Pin 2 - VFD FM1 (ADC in) green wire [input proportional to speed]
-- Pin 3 - VFD VF1 (DAC out) orange wire [ouput proportional to desired frequency]
-- Pin 4 - VFD GND (tied to system ground/neutral of power 5V power) white wire
+- Pin 3 - VFD VF1 (DAC out) white wire [ouput proportional to desired frequency]
+- Pin 4 - VFD GND (tied to system ground/neutral of power 5V power) orange wire
 - PIN 5 - VFD 24V (LED_PLUS) - blue to GX12-4 pin 1 [common anode for warning LEDs]
 - Pin 6 - VFD Common (also to off/auto pin 2 ) green wire 
 - Pin 7 - VFD DI1 (also to off/auto pin 4) brown wire [tell VFD to start the motor]
+- Pin 8 - N/C
 
 Rotory Encoder (ribbon cable)
 - GND - grey (top pin)
