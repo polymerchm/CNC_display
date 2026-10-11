@@ -1,53 +1,54 @@
 
 Bodgery CNC-Router Heads-Up Display
 
-Rev 0:
-    reads FM1 via an I2C ADC - a voltage proportional to the spindle frequency/speed
-        ADC Model: Sparkfun ADS 1115
+Rev 0
+- reads FM1 via an I2C ADC - a voltage proportional to the spindle frequency/speed
+    - ADC Model: Sparkfun ADS 1115
+- send a voltage between 0 and 10V to program the VFD
+    - DAC Model: Sparkfun MCP4725 
 
-    send a voltage between 0 and 10V to program the VFD
-        DAC Model: Sparkfun MCP4725 
-
-    using a rotory encoder to change the desired spindle speed ( programs the to the DAC)
+- using a rotory encoder to change the desired spindle speed ( programs the to the DAC)
     
-    monitors the T1 line for spindle turn on
-        GPIO line 32 pulled up, looking for active low (toggles on any change)
-        ISR is debounced
-    accumulates the spindle time since bootup
-        task running in background when spindle is on.
-    displays relevant information
+- monitors the T1 line for spindle turn on
+    - GPIO line 32 pulled up, looking for active low (toggles on any change)
+    - ISR is debounced
+- accumulates the spindle time since bootup
+    - task running in background when spindle is on.
+    - displays relevant information
 
-    spindle_active_task:
-        monitors spindle state
+- spindle_active_task:
+    - monitors spindle state
 
-    ADC_task:
-        gets current frequency by reading the ADC and converting 
+- ADC_task:
+    - gets current frequency by reading the ADC and converting 
 
-    DAC_task
-        monitors its queue change changes the output voltage
+- DAC_task
+    - monitors its queue change changes the output voltage
+- Rotory encoder task
+    - send new voltage to the DAC queue
+    - update the speed incrincrementetement (using button)
+- display_task:
+    -  updates programmed RPM
+    - updated accumulated spindle time
+    - display spindle state
+    - update elasped usage time
 
-    Rotory encoder task
-        send new voltage to the DAC queue
-    display_task:
-        updates programmed RPM
-        updated accumulated spindle time
-        display spindle state
-
-    relay_task:
-        base on spindle state:
-            turns on/off the relays
-                chiller (0-5v)
-                dust collector (0-5V)
-                red/yellow LED (DPDT switch in AUTO) (green when DPDT switch in OFF position)
-
-
+- relay_task:
+    -  base on spindle state:
+        - turns on/off the relays
+            - #1 chiller (0-5v)
+            - #2 dust collector (0-5V)
+            - #3 red/yellow LED (DPDT switch in AUTO) (green when DPDT switch in OFF position)
+            - #4 FOB active status 
+---
 
 Rev 1
-    monitors/displays sound levels
-    MQTT logging
-    scrape data from fob reader api
+- monitors/displays sound levels
+- MQTT logging
+- scrape data from fob reader api
 
-
+---
+    
 Sparkfun qwik (I2C) cables
 - Black = GND 
 - Red = 3.3V 
@@ -73,18 +74,23 @@ Off/Auto Switch
 - 5- Common 2 :  SPINDLE_CMD (white wire from GX1-2 spindle_CMD))
 - 6- Auto 2 : NC
 
-22/8 Cable (used for GX12-7 connector)
-- Red - 1
-- Black - 2
-- White - 3
-- Green - 4
-- Yellow - 5
-- Brown - 6
+22/8 Cable (used for GX12-8 connector)
+- Black - 1
+- Brown - 2
+- Red - 3
+- Orange - 4
+- Green - 5
+- Yellow - 6
 - Blue - 7
+- White - 8
 
 GX-12-2 connector (TechnoCNC Command) [ start motor relay on TechnoCNC controller]
 - Pin 1 - left of alighment = Common (green wire  connected to GX-12 pin 6, green wire)
 - Pin 2 - Right of alignment = Command (floating) - white wire 
+
+GX-12-2 connector (FOB SYstem) [ tell FOB maching is running ]
+- Pin 1 -  FOB GND (Relay #4 common)
+- Pin 2 -  Active (Relay #4, NO)
 
 GX12-4 connector
 - Pin 1 - left of alighnment then CCW to Pin 4
@@ -94,27 +100,33 @@ GX12-4 connector
 - PIN 4 - LED_GREEN - green wire
 
 GX-4 Cabling
-- Black - LED_PLUS 
-- Red - LED_RED
-- White - LED_GREEN
-- Yellow - LED_YELLOW
+- Black - LED_PLUS  - Pin 1
+- Red - LED_RED - Pin 2
+- Yellow - LED_YELLOW - Pin 3
+- White - LED_GREEN - Pin 4
 
-GX12-3 connectors
+mini XLR 3 pin connectors
 Pin 1 right of the alignment slot then CW to  Pin 3
 - Pin 1 - signal from relay to power strip enable (chiller yellow wire, dust collector blue wire)
 - Pin 2 - NC
-- Pin 3 - GND (white wire )                                                                )
+- Pin 3 - GND (white wire )       
+
+XLR Cables
+- Pin 1  - Red wire
+- Pin 3  - Black wire                                                         )
 
 
-GX12-7 Connector, As viewed from solder points
-Pin 1 - left of alignment pin, then CCW around to Pin 6.  Pin 7 in the center.
-- Pin 1 - VFD Run Sense (GPIO32) blue wire [ programmed relay on the VFD, closed when running ]
+GX16-8 Connector, As viewed from solder points
+
+- Pin 1 - left of alignment pin, then CCW around to Pin 6.  Pin 7 in the center.<br><br>
+- Pin 1 - Controller Run Sense
 - Pin 2 - VFD FM1 (ADC in) green wire [input proportional to speed]
-- Pin 3 - VFD VF1 (DAC out) orange wire [ouput proportional to desired frequency]
-- Pin 4 - VFD GND (tied to system ground/neutral of power 5V power) white wire
+- Pin 3 - VFD VF1 (DAC out) white wire [ouput proportional to desired frequency]
+- Pin 4 - VFD GND (tied to system ground/neutral of power 5V power) orange wire
 - PIN 5 - VFD 24V (LED_PLUS) - blue to GX12-4 pin 1 [common anode for warning LEDs]
 - Pin 6 - VFD Common (also to off/auto pin 2 ) green wire 
 - Pin 7 - VFD DI1 (also to off/auto pin 4) brown wire [tell VFD to start the motor]
+- Pin 8 - N/C
 
 Rotory Encoder (ribbon cable)
 - GND - grey (top pin)
@@ -153,7 +165,7 @@ I2C Connections (relay board)
 - GND - qwic connect on ADV
 - Vcc - +5v on ESP32
 
-
+---
 NOTE:
 
 - LVGL (using version 8.4 for SwquareLine Studio compatibility) expects color in RBG order, NOT RGB.   helper function rgb2rbg etc fixes that.
