@@ -43,6 +43,7 @@
 #include "formatWithCommas.h"
 
 #include "main.h"
+#include "settings_screens.h"
 
 #ifndef ARRAY
 #define ARRAY_LENGTH(x) (sizeof(x) / sizeof((x)[0]))
@@ -202,6 +203,57 @@ uint8_t speed_increment_pointer = 0;
 uint16_t program_spindle_speed = 14000;
 #define DEFAULT_SPEED 14000
 
+/* Spindle speed calibration trims (rpm), set from the settings screen.
+   Each "low" trim applies fully at RPM_MIN, each "high" trim fully at RPM_MAX,
+   and they blend in a straight line in between.
+     trim_*  : output, added to the commanded speed before the DAC
+     read_*  : readout, added to the speed measured by the ADC */
+static volatile int32_t trim_low_rpm = 0;
+static volatile int32_t trim_high_rpm = 0;
+static volatile int32_t read_low_rpm = 0;
+static volatile int32_t read_high_rpm = 0;
+
+/* VFD analog speed output (volts, from the ADC) -> calibrated actual rpm. */
+static int adc_to_rpm(float volts)
+{
+    float raw = volts / FM1_MAX * RPM_MAX; // uncalibrated, same scaling as before
+    float trim;
+    if (raw < RPM_MIN)
+    {
+        // below the operating range fade the low trim in from zero,
+        // so a stopped spindle still reads 0 instead of the trim value
+        trim = (raw > 0) ? read_low_rpm * (raw / RPM_MIN) : 0;
+    }
+    else
+    {
+        float t = (raw - RPM_MIN) / (float)(RPM_MAX - RPM_MIN);
+        trim = read_low_rpm + (read_high_rpm - read_low_rpm) * t;
+    }
+    float rpm = raw + trim;
+    return (rpm > 0) ? (int)roundf(rpm) : 0;
+}
+
+/* Send program_spindle_speed (plus calibration) to the VFD via the DAC.
+   Call whenever program_spindle_speed or a trim changes. */
+static void update_spindle_output(void)
+{
+    float t = ((float)program_spindle_speed - RPM_MIN) / (float)(RPM_MAX - RPM_MIN);
+    float trim = trim_low_rpm + (trim_high_rpm - trim_low_rpm) * t;
+    float corrected_rpm = (float)program_spindle_speed + trim;
+
+    float new_frequency = corrected_rpm / 30.0;
+    float new_voltage = (new_frequency / 800.0) * ((float)VF1_MAX);
+    float counts = round(new_voltage / VDD * 4095 + 0.5); // same conversion as before
+    if (counts < 0)
+        counts = 0;
+    if (counts > 4095)
+        counts = 4095;
+
+    esp_err_t err = mcp4725_set_voltage(dac, (uint16_t)counts);
+    if (err != ESP_OK)
+        ESP_LOGE(TAG, "DAC write failed: %s", esp_err_to_name(err));
+}
+
 static void encoder_event_handler(const rotary_encoder_event_t *event, void *ctx)
 {
     QueueHandle_t queue = (QueueHandle_t)ctx;
@@ -209,6 +261,7 @@ static void encoder_event_handler(const rotary_encoder_event_t *event, void *ctx
 }
 
 #define RE_EV_QUEUE 5
+#define HOLD_FOR_SETTINGS_US (3 * 1000 * 1000) // hold the knob 3 s to open the access-code screen
 
 void re_task(void *arg)
 {
@@ -229,14 +282,63 @@ void re_task(void *arg)
     speed_increment_pointer = 0;
 
     ESP_LOGI(TAG, "Initial value: %" PRIi32, val);
+    /* press-and-hold tracking for the settings screens:
+       btn_down_us != 0 while a press that started on the main screen is held */
+    int64_t btn_down_us = 0;
+    bool hold_fired = false;
+    uint8_t ptr_before_press = 0;
+
     while (1)
     {
-        xQueueReceive(re_event_queue, &e, portMAX_DELAY);
+        // while the button is held on the main screen, wake up when the hold
+        // reaches HOLD_FOR_SETTINGS_US even if no other encoder event arrives
+        TickType_t wait = portMAX_DELAY;
+        if (btn_down_us != 0 && !hold_fired)
+        {
+            int64_t remaining_us = HOLD_FOR_SETTINGS_US - (esp_timer_get_time() - btn_down_us);
+            wait = (remaining_us > 0) ? pdMS_TO_TICKS(remaining_us / 1000) + 1 : 0;
+        }
+
+        if (xQueueReceive(re_event_queue, &e, wait) != pdTRUE)
+        {
+            // held long enough: undo the step change from the initial press, open the code screen
+            hold_fired = true;
+            speed_increment_pointer = ptr_before_press;
+            settings_ui_open();
+            continue;
+        }
+
+        // end of a press that started on the main screen
+        if (e.type == RE_ET_BTN_RELEASED && btn_down_us != 0)
+        {
+            int64_t held_us = esp_timer_get_time() - btn_down_us;
+            if (!hold_fired && held_us >= CONFIG_RE_BTN_LONG_PRESS_TIME_US)
+            {
+                // ordinary long press: same action as before, now done on release
+                speed_increment_pointer = 0;
+                program_spindle_speed = (program_spindle_speed / 1000) * 1000;
+                update_spindle_output();
+                ESP_LOGI(TAG, "Acceleration disabled");
+            }
+            btn_down_us = 0;
+            hold_fired = false;
+            continue;
+        }
+
+        // the code / settings screens own the encoder while they are showing
+        if (settings_ui_active())
+        {
+            settings_ui_handle_event(&e);
+            continue;
+        }
 
         switch (e.type)
         {
         case RE_ET_BTN_PRESSED:
             // ESP_LOGI(TAG, "Button pressed");
+            btn_down_us = esp_timer_get_time();
+            hold_fired = false;
+            ptr_before_press = speed_increment_pointer;
             speed_increment_pointer++;
             if (speed_increment_pointer > ARRAY_LENGTH(speed_increments) - 1)
             {
@@ -245,10 +347,7 @@ void re_task(void *arg)
             break;
 
         case RE_ET_BTN_LONG_PRESSED:
-            // ESP_LOGI(TAG, "Looooong pressed button");
-            speed_increment_pointer = 0;
-            program_spindle_speed = (program_spindle_speed / 1000) * 1000;
-            ESP_LOGI(TAG, "Acceleration disabled");
+            // handled on release (above) so the 3 s settings hold doesn't also reset the step
             break;
         case RE_ET_CHANGED:
             // ESP_LOGI(TAG, "Value = %" PRIi32, val);
@@ -265,10 +364,7 @@ void re_task(void *arg)
                 //ESP_LOGI(TAG, "new speed = %" PRIi16, program_spindle_speed);
             }
             // change the output signal to the VFD
-            float new_frequency = (float)program_spindle_speed / 30.0;
-            float new_voltage = (new_frequency / 800.0) * ((float)VF1_MAX);
-            uint16_t new_voltage_value = round(new_voltage / VDD * 4095 + 0.5);
-            mcp4725_set_voltage(dac, new_voltage_value);
+            update_spindle_output();
             break;
         default:
             break;
@@ -427,8 +523,8 @@ void update_scr_cb(lv_timer_t *timer)
 {
     float next_adc_value;
 
-    char buff[10];
-    if (lvgl_port_lock(100))
+    char buff[16];
+    if (lvgl_port_lock(100)) // recursive; must be released at the end
     {
         /**** run status ***/
         lv_color_t red = lv_color_hex(rgb2rbg(0xff0000));
@@ -454,9 +550,10 @@ void update_scr_cb(lv_timer_t *timer)
         lv_color_t status_color = (run_sense_relay_state ? red : green);
 
         /**speed updates */
-        if (xQueueReceive(adc_data_queue, &next_adc_value, pdMS_TO_TICKS(100)))
+        // take the newest reading without blocking the LVGL task
+        while (adc_data_queue && xQueueReceive(adc_data_queue, &next_adc_value, 0))
         {
-            run_speed = round(next_adc_value / FM1_MAX * RPM_MAX);
+            run_speed = adc_to_rpm(next_adc_value);
         }
 
         format_with_commas(run_speed, buff);
@@ -489,6 +586,45 @@ void update_scr_cb(lv_timer_t *timer)
 
         // /** speed increment update  */
         lv_label_set_text_fmt(ui_Delta, "%d", speed_increments[speed_increment_pointer]);
+
+        // live set / actual speed on the calibration screen
+        if (settings_ui_active())
+        {
+            char set_buf[16], act_buf[16], info[48];
+            format_with_commas(program_spindle_speed, set_buf);
+            format_with_commas(run_speed, act_buf);
+            snprintf(info, sizeof(info), "Set %s    Actual %s", set_buf, act_buf);
+            settings_ui_set_info(info);
+        }
+
+        lvgl_port_unlock();
+    }
+}
+
+/********* settings screen parameters ****************/
+/* Called at startup with the saved values, and live while a value is adjusted
+   on the settings screen. Runs in the encoder task. */
+static void on_setting_changed(int index, int32_t value)
+{
+    ESP_LOGI(TAG, "%s = %" PRIi32, settings_name(index), value);
+    switch (index)
+    {
+    case SETTING_READ_LOW: // readout trims take effect on the next screen refresh
+        read_low_rpm = value;
+        break;
+    case SETTING_READ_HIGH:
+        read_high_rpm = value;
+        break;
+    case SETTING_OUT_LOW:
+        trim_low_rpm = value;
+        update_spindle_output(); // spindle follows the trim live
+        break;
+    case SETTING_OUT_HIGH:
+        trim_high_rpm = value;
+        update_spindle_output();
+        break;
+    default:
+        break;
     }
 }
 
@@ -508,6 +644,9 @@ void app_main(void)
     // initialize DAC board
     ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &dac_i2C_cfg, &dac));
 
+    // load saved calibration trims (NVS) and set the DAC to the starting speed
+    ESP_ERROR_CHECK(settings_init(on_setting_changed));
+
     // pull all relays to open (active low)
 
     relay_register.raw = 0xf0;
@@ -515,7 +654,6 @@ void app_main(void)
 
     /**************************** LCD ************************ */
 
-    ESP_LOGI(TAG, "Hello ESP32");
     ESP_LOGI(TAG, "Initialising SPI bus on host %d (MOSI=%d, SCK=%d)", LCD_HOST, PIN_MOSI, PIN_SCK);
 
     spi_bus_config_t buscfg = ILI9341_PANEL_BUS_SPI_CONFIG(PIN_SCK, PIN_MOSI,

@@ -9,7 +9,7 @@
       "intelliSenseMode": "gcc-arm",
       "includePath": [
         "${workspaceFolder}/**",
-        "/Users/spollack/.espressif/v6.0.1/esp-idf/components/**"
+        "/Users/spollack/.espressif/v6.0.3/esp-idf/components/**"
       ],
       "browse": {
         "path": [
