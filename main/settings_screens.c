@@ -43,14 +43,23 @@ typedef struct
     const char *nvs_key; // NVS key, max 15 characters, must be unique
 } param_def_t;
 
-/* Spindle speed calibration (applied in main.c, update_spindle_output()).
- * Each trim is added to the commanded speed before it is turned into the DAC
- * voltage: the low trim fully at RPM_MIN, the high trim fully at RPM_MAX, and a
- * straight-line blend of the two in between. Positive = spindle was too slow.
- * One DAC count is about 6 rpm, so a 10 rpm step is close to the resolution. */
+/* Spindle speed calibration, applied in main.c. Each pair is a two-point trim
+ * in rpm: the "low" value applies fully at RPM_MIN, the "high" value fully at
+ * RPM_MAX, with a straight-line blend in between.
+ *
+ *   Readout  - added to the speed measured from the VFD's analog output (ADC),
+ *              so "Actual" matches the speed the VFD itself reports.
+ *              Positive = the display was reading low.
+ *   Output   - added to the commanded speed before it becomes the DAC voltage.
+ *              Positive = the spindle was running slow.
+ *
+ * Calibrate Readout first: Output is judged against "Actual".
+ * Order here must match settings_index_t in settings_screens.h. */
 static const param_def_t PARAMS[SETTINGS_PARAM_COUNT] = {
-    {"Low-end trim", " rpm", -2000, 2000, 10, 0, "trim_low"},
-    {"High-end trim", " rpm", -2000, 2000, 10, 0, "trim_high"},
+    [SETTING_READ_LOW] = {"Readout low", " rpm", -2000, 2000, 10, 0, "read_low"},
+    [SETTING_READ_HIGH] = {"Readout high", " rpm", -2000, 2000, 10, 0, "read_high"},
+    [SETTING_OUT_LOW] = {"Output low", " rpm", -2000, 2000, 10, 0, "trim_low"},   // keys kept from the
+    [SETTING_OUT_HIGH] = {"Output high", " rpm", -2000, 2000, 10, 0, "trim_high"}, // 2-trim version
 };
 
 #define NVS_NAMESPACE "settings"
@@ -119,7 +128,6 @@ static lv_obj_t *s_set_scr;
 static lv_obj_t *s_title;
 static lv_obj_t *s_row[SETTINGS_PARAM_COUNT];
 static lv_obj_t *s_row_value[SETTINGS_PARAM_COUNT];
-static lv_obj_t *s_row_bar[SETTINGS_PARAM_COUNT];
 static lv_obj_t *s_save_box;
 static lv_obj_t *s_save_lbl;
 static lv_obj_t *s_hint;
@@ -472,9 +480,16 @@ static void code_handle_event(const rotary_encoder_event_t *e)
 /*==========================================================*/
 
 #define ROW_W 296
-#define ROW_H 58
-#define ROW_Y0 40
-#define ROW_PITCH 64
+#define ROW_H 34
+#define ROW_Y0 28
+#define ROW_PITCH 38
+#define GROUP_GAP 4 // extra space between the Readout and Output pairs
+#define SAVE_H 28
+
+static lv_coord_t row_y(int i)
+{
+    return ROW_Y0 + i * ROW_PITCH + (i >= SETTING_OUT_LOW ? GROUP_GAP : 0);
+}
 
 static void format_value(int index, char *buf, size_t len)
 {
@@ -497,9 +512,6 @@ static void settings_refresh(void)
         format_value(i, buf, sizeof(buf));
         lv_label_set_text(s_row_value[i], buf);
         lv_obj_set_style_text_color(s_row_value[i], editing ? COLOR_ORANGE : COLOR_WHITE, 0);
-
-        lv_bar_set_value(s_row_bar[i], s_values[i], LV_ANIM_OFF);
-        lv_obj_set_style_bg_color(s_row_bar[i], accent, LV_PART_INDICATOR);
     }
 
     bool save_focused = (s_focus == FOCUS_SAVE);
@@ -520,36 +532,27 @@ static void settings_screen_create(void)
 
     // title line; main.c replaces it with the live set/actual speed via settings_ui_set_info()
     s_title = make_label(s_set_scr, &lv_font_montserrat_18, COLOR_YELLOW, "Spindle Calibration");
-    lv_obj_align(s_title, LV_ALIGN_TOP_MID, 0, 11);
+    lv_obj_align(s_title, LV_ALIGN_TOP_MID, 0, 4);
 
     for (int i = 0; i < SETTINGS_PARAM_COUNT; i++)
     {
         s_row[i] = make_box(s_set_scr, ROW_W, ROW_H);
-        lv_obj_align(s_row[i], LV_ALIGN_TOP_MID, 0, ROW_Y0 + i * ROW_PITCH);
+        lv_obj_align(s_row[i], LV_ALIGN_TOP_MID, 0, row_y(i));
 
         lv_obj_t *name = make_label(s_row[i], &lv_font_montserrat_18, COLOR_CYAN, PARAMS[i].name);
-        lv_obj_align(name, LV_ALIGN_TOP_LEFT, 10, 8);
+        lv_obj_align(name, LV_ALIGN_LEFT_MID, 10, 0);
 
         s_row_value[i] = make_label(s_row[i], &lv_font_montserrat_22, COLOR_WHITE, "");
-        lv_obj_align(s_row_value[i], LV_ALIGN_TOP_RIGHT, -10, 5);
-
-        s_row_bar[i] = lv_bar_create(s_row[i]);
-        lv_obj_set_size(s_row_bar[i], ROW_W - 24, 8);
-        lv_obj_align(s_row_bar[i], LV_ALIGN_BOTTOM_MID, 0, -9);
-        lv_bar_set_range(s_row_bar[i], PARAMS[i].min, PARAMS[i].max);
-        if (PARAMS[i].min < 0)
-            lv_bar_set_mode(s_row_bar[i], LV_BAR_MODE_SYMMETRICAL); // fill out from zero
-        lv_obj_set_style_bg_color(s_row_bar[i], COLOR_BORDER, LV_PART_MAIN);
-        lv_obj_set_style_bg_opa(s_row_bar[i], LV_OPA_COVER, LV_PART_MAIN);
+        lv_obj_align(s_row_value[i], LV_ALIGN_RIGHT_MID, -10, 0);
     }
 
-    s_save_box = make_box(s_set_scr, ROW_W, 34);
-    lv_obj_align(s_save_box, LV_ALIGN_TOP_MID, 0, ROW_Y0 + SETTINGS_PARAM_COUNT * ROW_PITCH);
+    s_save_box = make_box(s_set_scr, ROW_W, SAVE_H);
+    lv_obj_align(s_save_box, LV_ALIGN_TOP_MID, 0, row_y(SETTINGS_PARAM_COUNT - 1) + ROW_H + 6);
     s_save_lbl = make_label(s_save_box, &lv_font_montserrat_18, COLOR_WHITE, "Save & Exit");
     lv_obj_center(s_save_lbl);
 
     s_hint = make_label(s_set_scr, &lv_font_montserrat_14, COLOR_HINT, "");
-    lv_obj_align(s_hint, LV_ALIGN_BOTTOM_MID, 0, -8);
+    lv_obj_align(s_hint, LV_ALIGN_BOTTOM_MID, 0, -3);
 }
 
 static void settings_screen_open(void)

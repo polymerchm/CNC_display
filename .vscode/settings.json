@@ -1,5 +1,5 @@
 {
-  "C_Cpp.intelliSenseEngine": "disabled",
+  "C_Cpp.intelliSenseEngine": "default",
   "idf.extensionActivationMode": "always",
   "idf.openOcdConfigs": [
     "interface/ftdi/esp_ftdi.cfg",

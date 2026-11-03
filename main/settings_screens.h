@@ -3,8 +3,8 @@
  *
  * Two LVGL screens driven only by the rotary encoder:
  *   1. Access-code screen: dial a 4-digit code (turn = digit, click = next).
- *   2. Settings screen: adjust two parameters live (the spindle speed low-end
- *      and high-end trims); values are saved to NVS.
+ *   2. Settings screen: adjust four spindle calibration trims live (readout
+ *      low/high for the ADC, output low/high for the DAC); saved to NVS.
  *
  * Encoder controls
  *   Code screen:     turn = change digit, click = accept digit, hold = cancel
@@ -25,7 +25,15 @@
 extern "C" {
 #endif
 
-#define SETTINGS_PARAM_COUNT 2
+/* Parameter indices (order on screen). */
+typedef enum
+{
+    SETTING_READ_LOW = 0, // readout (ADC) trim at RPM_MIN, rpm
+    SETTING_READ_HIGH,    // readout (ADC) trim at RPM_MAX, rpm
+    SETTING_OUT_LOW,      // output (DAC) trim at RPM_MIN, rpm
+    SETTING_OUT_HIGH,     // output (DAC) trim at RPM_MAX, rpm
+    SETTINGS_PARAM_COUNT
+} settings_index_t;
 
 /* Called whenever a parameter value changes (while adjusting, on cancel, and
  * once per parameter at startup from settings_init). Runs in the encoder task,
@@ -36,7 +44,7 @@ typedef void (*settings_change_cb_t)(int index, int32_t value);
  * Call once from app_main before the encoder task starts. */
 esp_err_t settings_init(settings_change_cb_t on_change);
 
-/* Current value / display name of parameter 0 or 1. */
+/* Current value / display name of a parameter (settings_index_t). */
 int32_t settings_get(int index);
 const char *settings_name(int index);
 
